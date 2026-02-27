@@ -42,6 +42,7 @@ Always prioritize unit tests for `Domain` and `Application` layers. Use `Moq` or
 ## 🛰 Git Commit Conventions
 
 - **Branching Strategy**: ALWAYS create a new branch from `main` before starting any feature implementation, bug fix, or refactoring.
+- **Atomic Commits**: Avoid mixing different contexts in the same commit. For example, guideline updates (AGENTS.md) should be committed separately from feature code implementation.
 - **Commit Format**: Follow the **Conventional Commits** specification:
 - **Format**: `<type>(<scope>): <description>`
 - **Types**:
