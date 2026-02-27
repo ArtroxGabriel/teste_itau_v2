@@ -1,0 +1,6 @@
+@ItauCompraProgramada.Api_HostAddress = http://localhost:5018
+
+GET {{ItauCompraProgramada.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
