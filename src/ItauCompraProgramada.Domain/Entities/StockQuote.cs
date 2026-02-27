@@ -6,7 +6,7 @@ public class StockQuote
 {
     public long Id { get; private set; }
     public DateTime TradingDate { get; private set; }
-    public string Ticker { get; private set; }
+    public string Ticker { get; private set; } = null!;
     public decimal OpeningPrice { get; private set; }
     public decimal ClosingPrice { get; private set; }
     public decimal MaxPrice { get; private set; }

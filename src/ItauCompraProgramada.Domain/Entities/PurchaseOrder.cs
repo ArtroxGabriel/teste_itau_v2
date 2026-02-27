@@ -7,7 +7,7 @@ public class PurchaseOrder
 {
     public long Id { get; private set; }
     public long MasterAccountId { get; private set; }
-    public string Ticker { get; private set; }
+    public string Ticker { get; private set; } = null!;
     public int Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
     public MarketType MarketType { get; private set; }

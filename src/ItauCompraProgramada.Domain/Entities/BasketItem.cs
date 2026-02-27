@@ -4,7 +4,7 @@ public class BasketItem
 {
     public long Id { get; private set; }
     public long BasketId { get; private set; }
-    public string Ticker { get; private set; }
+    public string Ticker { get; private set; } = null!;
     public decimal Percentage { get; private set; }
 
     // Navigation

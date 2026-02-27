@@ -1,4 +1,9 @@
+using ItauCompraProgramada.Application.Interfaces;
+using ItauCompraProgramada.Application.Services;
+using ItauCompraProgramada.Domain.Interfaces;
+using ItauCompraProgramada.Infrastructure.ExternalServices;
 using ItauCompraProgramada.Infrastructure.Persistence;
+using ItauCompraProgramada.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +18,10 @@ public static class DependencyInjection
         
         services.AddDbContext<ItauDbContext>(options =>
             options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
+        services.AddSingleton<ICotahistParser, CotahistParser>();
+        services.AddScoped<IStockQuoteRepository, StockQuoteRepository>();
+        services.AddScoped<IQuoteService, QuoteService>();
 
         return services;
     }

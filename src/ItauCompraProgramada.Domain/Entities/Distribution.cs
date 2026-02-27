@@ -7,7 +7,7 @@ public class Distribution
     public long Id { get; private set; }
     public long PurchaseOrderId { get; private set; }
     public long FilhoteCustodyId { get; private set; }
-    public string Ticker { get; private set; }
+    public string Ticker { get; private set; } = null!;
     public int Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
     public DateTime DistributedAt { get; private set; }
