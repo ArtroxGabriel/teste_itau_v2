@@ -41,8 +41,8 @@ Always prioritize unit tests for `Domain` and `Application` layers. Use `Moq` or
 
 ## 🛰 Git Commit Conventions
 
-Follow the **Conventional Commits** specification:
-
+- **Branching Strategy**: ALWAYS create a new branch from `main` before starting any feature implementation, bug fix, or refactoring.
+- **Commit Format**: Follow the **Conventional Commits** specification:
 - **Format**: `<type>(<scope>): <description>`
 - **Types**:
   - `feat`: A new feature
