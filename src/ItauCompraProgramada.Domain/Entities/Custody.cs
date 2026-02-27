@@ -6,7 +6,7 @@ public class Custody
 {
     public long Id { get; private set; }
     public long AccountId { get; private set; }
-    public string Ticker { get; private set; }
+    public string Ticker { get; private set; } = null!;
     public int Quantity { get; private set; }
     public decimal AveragePrice { get; private set; }
     public DateTime LastUpdatedAt { get; private set; }

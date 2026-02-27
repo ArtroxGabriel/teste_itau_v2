@@ -5,9 +5,9 @@ namespace ItauCompraProgramada.Domain.Entities;
 public class Client
 {
     public long Id { get; private set; }
-    public string Name { get; private set; }
-    public string Cpf { get; private set; }
-    public string Email { get; private set; }
+    public string Name { get; private set; } = null!;
+    public string Cpf { get; private set; } = null!;
+    public string Email { get; private set; } = null!;
     public decimal MonthlyContribution { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime AdhesionDate { get; private set; }

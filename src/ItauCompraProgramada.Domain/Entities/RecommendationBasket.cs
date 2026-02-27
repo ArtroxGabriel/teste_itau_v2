@@ -6,7 +6,7 @@ namespace ItauCompraProgramada.Domain.Entities;
 public class RecommendationBasket
 {
     public long Id { get; private set; }
-    public string Name { get; private set; }
+    public string Name { get; private set; } = null!;
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? DeactivatedAt { get; private set; }

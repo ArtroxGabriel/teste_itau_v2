@@ -7,7 +7,7 @@ public class GraphicAccount
 {
     public long Id { get; private set; }
     public long ClienteId { get; private set; }
-    public string AccountNumber { get; private set; }
+    public string AccountNumber { get; private set; } = null!;
     public AccountType Type { get; private set; }
     public DateTime CreatedAt { get; private set; }
 

@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ItauCompraProgramada.Application\ItauCompraProgramada.Application.csproj" />
+    <ProjectReference Include="..\..\src\ItauCompraProgramada.Infrastructure\ItauCompraProgramada.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
