@@ -2,6 +2,253 @@
 
 This document provides essential instructions for AI agents working on the Itau Compra Programada repository.
 
+---
+
+## 🗂 Project Overview
+
+**Itaú Compra Programada ("Top Five")** is a Brazilian stock automated-purchase platform. Clients join the product, set a monthly contribution, and the system periodically buys a curated basket of 5 stocks on their behalf. An admin manages the recommendation basket; the purchase motor runs on days 5, 15, and 25 of each month. IR (income tax) events are published to Kafka for downstream reporting.
+
+---
+
+## 📁 Folder Structure
+
+```
+/
+├── docker-compose.yml              # MySQL + Kafka + Zookeeper + Kafka-UI
+├── requirements/                   # Product requirements (read before coding)
+│   ├── desafio-tecnico-compra-programada.md
+│   ├── regras-negocio-detalhadas.md
+│   ├── layout-cotahist-b3.md
+│   ├── glossario-compra-programada.md
+│   ├── exemplos-contratos-api.md
+│   └── diagrama-*.drawio
+├── src/
+│   ├── ItauCompraProgramada.Domain/            # Core domain (no external deps)
+│   │   ├── Entities/
+│   │   │   ├── Client.cs
+│   │   │   ├── GraphicAccount.cs               # AddBalance / SubtractBalance
+│   │   │   ├── Custody.cs                      # SubtractQuantity / UpdateAveragePrice
+│   │   │   ├── PurchaseOrder.cs                # negative Quantity = sell
+│   │   │   ├── RecommendationBasket.cs
+│   │   │   ├── BasketItem.cs                   # Percentage (e.g. 25m = 25%)
+│   │   │   ├── Distribution.cs
+│   │   │   ├── IREvent.cs
+│   │   │   ├── Rebalancing.cs
+│   │   │   ├── StockQuote.cs
+│   │   │   ├── StoredEvent.cs                  # Idempotency / event sourcing lite
+│   │   │   └── ContributionUpdate.cs
+│   │   ├── Enums/
+│   │   │   ├── AccountType.cs
+│   │   │   ├── IREventType.cs
+│   │   │   ├── MarketType.cs
+│   │   │   └── RebalancingType.cs
+│   │   ├── Interfaces/                         # Repository contracts
+│   │   │   ├── IClientRepository.cs
+│   │   │   ├── ICustodyRepository.cs
+│   │   │   ├── IDistributionRepository.cs
+│   │   │   ├── IPurchaseOrderRepository.cs
+│   │   │   ├── IRecommendationBasketRepository.cs
+│   │   │   └── IStockQuoteRepository.cs
+│   │   └── Repositories/
+│   │       ├── IEventLogRepository.cs
+│   │       └── IIREventRepository.cs
+│   │
+│   ├── ItauCompraProgramada.Application/       # Use cases (CQRS via MediatR)
+│   │   ├── Behaviors/
+│   │   │   ├── LoggingBehavior.cs
+│   │   │   ├── ValidationBehavior.cs           # FluentValidation pipeline
+│   │   │   └── ResiliencyBehavior.cs           # Idempotency via StoredEvent
+│   │   ├── Common/Interfaces/
+│   │   │   └── ICorrelatedRequest.cs
+│   │   ├── Interfaces/
+│   │   │   ├── ICotahistParser.cs
+│   │   │   ├── IKafkaProducer.cs
+│   │   │   └── IQuoteService.cs
+│   │   ├── Admin/
+│   │   │   ├── Commands/CreateBasket/          # CreateBasketCommand + Handler + Validator + Response
+│   │   │   └── Queries/
+│   │   │       ├── GetCurrentBasket/
+│   │   │       └── GetBasketHistory/
+│   │   ├── Clients/
+│   │   │   ├── Commands/
+│   │   │   │   ├── CreateClient/               # CreateClientCommand + Handler + Validator
+│   │   │   │   ├── DeactivateClient/
+│   │   │   │   └── UpdateClientContribution/
+│   │   │   └── Queries/
+│   │   │       ├── GetClientWallet/
+│   │   │       ├── GetClientPortfolio/
+│   │   │       └── GetDetailedPerformance/
+│   │   ├── Purchases/Commands/ExecutePurchaseMotor/
+│   │   │   ├── ExecutePurchaseMotorCommand.cs
+│   │   │   └── ExecutePurchaseMotorCommandHandler.cs   # Purchase motor logic
+│   │   ├── Services/
+│   │   │   └── QuoteService.cs
+│   │   ├── Taxes/Services/
+│   │   │   └── TaxService.cs
+│   │   └── DependencyInjection.cs
+│   │
+│   ├── ItauCompraProgramada.Infrastructure/    # EF Core, Kafka, parsers
+│   │   ├── ExternalServices/
+│   │   │   └── CotahistParser.cs               # B3 COTAHIST fixed-width parser
+│   │   ├── Messaging/
+│   │   │   └── KafkaProducer.cs
+│   │   ├── Migrations/                         # EF Core migrations
+│   │   ├── Persistence/
+│   │   │   ├── ItauDbContext.cs
+│   │   │   ├── Mappings/                       # One IEntityTypeConfiguration per entity
+│   │   │   └── Repositories/                   # EF Core implementations
+│   │   ├── Services/
+│   │   │   └── PurchaseScheduler.cs            # IHostedService — runs on days 5, 15, 25
+│   │   └── DependencyInjection.cs
+│   │
+│   └── ItauCompraProgramada.Api/               # Entry point
+│       ├── Controllers/
+│       │   ├── AdminController.cs
+│       │   ├── ClientsController.cs
+│       │   └── PurchasesController.cs
+│       ├── Models/                             # Request/response models (JsonPropertyName in PT-BR)
+│       ├── Program.cs
+│       ├── appsettings.json
+│       └── appsettings.Development.json
+│
+└── tests/
+    ├── ItauCompraProgramada.UnitTests/
+    │   ├── Application/
+    │   │   ├── Admin/Commands/CreateBasket/
+    │   │   ├── Admin/Queries/
+    │   │   ├── Clients/Commands/{CreateClient,DeactivateClient,UpdateClientContribution}/
+    │   │   ├── Clients/Queries/{GetClientWallet,GetDetailedPerformance}/
+    │   │   ├── Purchases/Commands/ExecutePurchaseMotor/
+    │   │   ├── Taxes/Services/
+    │   │   └── QuoteServiceTests.cs
+    │   └── Infrastructure/
+    │       └── CotahistParserTests.cs
+    └── ItauCompraProgramada.IntegrationTests/
+        └── UnitTest1.cs                        # Placeholder (not yet implemented)
+```
+
+---
+
+## 🧰 Tech Stack
+
+| Concern | Library / Version |
+|---|---|
+| Runtime | .NET 8 / C# 12 |
+| Web framework | ASP.NET Core 8 (`Microsoft.AspNetCore.OpenApi`) |
+| ORM | EF Core 9 (`Pomelo.EntityFrameworkCore.MySql 9`) |
+| CQRS / Mediator | MediatR 12 |
+| Validation | FluentValidation 11 (`FluentValidation.AspNetCore`) |
+| Messaging | Confluent.Kafka 2 |
+| Logging | Serilog + `Serilog.Sinks.Console` + `Serilog.AspNetCore` |
+| Serialization | `System.Text.Json` (built-in) |
+| API docs | Swashbuckle / Swagger |
+| Unit testing | xUnit + Moq + FluentAssertions |
+| Integration tests | xUnit (placeholder, no tests yet) |
+
+---
+
+## ⚙️ Environment Variables & Configuration
+
+Configuration is driven by `appsettings.json`. Override per-environment using `appsettings.{Environment}.json` or actual environment variables (ASP.NET Core standard).
+
+### `appsettings.json` keys
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=itau_compra_programada;Uid=root;Pwd=root;"
+  },
+  "Kafka": {
+    "BootstrapServers": "localhost:9092"
+  },
+  "Logging": {
+    "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" }
+  }
+}
+```
+
+**Never commit real credentials.** Use placeholder values and override with environment variables in production:
+
+```
+ConnectionStrings__DefaultConnection=...
+Kafka__BootstrapServers=...
+```
+
+### Docker Compose services
+
+| Service | Port | Purpose |
+|---|---|---|
+| `mysql` | 3306 | Primary database |
+| `kafka` | 9092 | Message broker |
+| `zookeeper` | 2181 | Kafka coordination |
+| `kafka-ui` | 8080 | Kafka web UI |
+
+---
+
+## ✅ Implementation Checklist
+
+### User Stories
+
+| ID | Story | Status |
+|---|---|---|
+| US01 | Client adhesion (`POST /api/clientes`) | Done |
+| US01 | Client exit (`DELETE /api/clientes/{id}`) | Done |
+| US01 | Update monthly contribution (`PUT /api/clientes/{id}/contribuicao`) | Done |
+| US02 | Create recommendation basket (`POST /api/admin/cesta`) | Done |
+| US02 | Get current basket (`GET /api/admin/cesta/atual`) | Done |
+| US02 | Get basket history (`GET /api/admin/cesta/historico`) | Done |
+| US03 | Purchase motor endpoint (`POST /api/motor/executar-compra`) | Done |
+| US03 | Scheduled motor (days 5, 15, 25) via `PurchaseScheduler` | Done |
+| US04 | Rebalancing: sell tickers removed from basket (RN-046/047) | Done |
+| US04 | Rebalancing: stayed-ticker proportion drift RN-049 | **Pending** |
+| US04 | Rebalancing: >5% drift trigger RN-050 | Postponed |
+| US05 | B3 COTAHIST file parser | Done |
+| US06 | IR dedo-duro Kafka events | Done |
+| US06 | Profit tax Kafka events | Done |
+| US07 | Client wallet (`GET /api/clientes/{id}/carteira`) | Done |
+| US07 | Client performance (`GET /api/clientes/{id}/rentabilidade`) | Done |
+
+### Technical Tasks
+
+| Task | Status |
+|---|---|
+| Domain entities (all 13 entities) | Done |
+| EF Core migrations (4 migrations) | Done |
+| MediatR pipeline (Logging → Validation → Resiliency) | Done |
+| Idempotency via `StoredEvent` + `ResiliencyBehavior` | Done |
+| Kafka producer (`IKafkaProducer`) | Done |
+| Serilog JSON logging | Done |
+| Swagger / OpenAPI | Done |
+| Global exception middleware (error envelope) | **Pending** |
+| Unit tests — Application layer (26 tests, all green) | Done |
+| Integration tests | Not started |
+
+### Known Gaps (next work items, in priority order)
+
+1. **RN-049** — Add `ProcessStayedTickerRebalancingAsync` to `ExecutePurchaseMotorCommandHandler` (compares current custody quantities against basket target %, sells excess / buys deficit). Include unit tests.
+2. **Global exception middleware** — `src/ItauCompraProgramada.Api/Middleware/GlobalExceptionMiddleware.cs`: map `ValidationException` → 400, `KeyNotFoundException` → 404, `InvalidOperationException` → 400/409/500 using the error-code table below. Register in `Program.cs`.
+3. **Enrich motor response** — `ExecutePurchaseMotorCommand` currently returns no data; the API contract expects `ordensCompra`, `distribuicoes`, `residuosCustMaster`, `eventosIRPublicados`.
+4. **`GET /api/admin/conta-master/custodia`** — endpoint defined in the API contract but not yet implemented.
+
+### Error envelope format & codes
+
+Response body: `{ "erro": "<human message>", "codigo": "<MACHINE_CODE>" }`
+
+| HTTP | Code | Trigger |
+|---|---|---|
+| 400 | `CLIENTE_CPF_DUPLICADO` | CPF already registered |
+| 400 | `VALOR_MENSAL_INVALIDO` | Monthly value below minimum |
+| 400 | `PERCENTUAIS_INVALIDOS` | Basket percentages do not sum to 100% |
+| 400 | `QUANTIDADE_ATIVOS_INVALIDA` | Basket does not have exactly 5 assets |
+| 400 | `CLIENTE_JA_INATIVO` | Client is already inactive |
+| 404 | `CLIENTE_NAO_ENCONTRADO` | Client not found |
+| 404 | `CESTA_NAO_ENCONTRADA` | No active basket found |
+| 404 | `COTACAO_NAO_ENCONTRADA` | COTAHIST quote not found for date |
+| 409 | `COMPRA_JA_EXECUTADA` | Purchase already executed for this date |
+| 500 | `KAFKA_INDISPONIVEL` | Error publishing to Kafka |
+
+---
+
 ## 🛠 Build, Lint, and Test Commands
 
 All commands should be executed from the root of the repository.
