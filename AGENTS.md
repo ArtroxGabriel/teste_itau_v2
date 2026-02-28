@@ -43,6 +43,8 @@ Always prioritize unit tests for `Domain` and `Application` layers. Use `Moq` or
 
 - **Branching Strategy**: ALWAYS create a new branch from `main` before starting any feature implementation, bug fix, or refactoring.
 - **Atomic Commits**: Avoid mixing different contexts in the same commit. For example, guideline updates (AGENTS.md) should be committed separately from feature code implementation.
+- **Commit after changes**: ALWAYS commit your code after completing a logical unit of work (feature, refactor, fix, etc.).
+- **Correlated Changes**: If the new changes are directly related to the previous commit and it hasn't been pushed yet, you may use `git commit --amend` to keep the history clean.
 - **Commit Format**: Follow the **Conventional Commits** specification:
 - **Format**: `<type>(<scope>): <description>`
 - **Types**:
@@ -176,5 +178,6 @@ All development MUST align with the documents in the `requirements/` directory:
 - **Proactiveness:** If you add a new service, remember to register it in the DI container.
 - **Migrations:** When changing Domain Entities, generate a new EF Core migration in the Infrastructure project.
 - **Tests:** Every new feature in `Application` or `Domain` MUST have corresponding unit tests.
+- **Logging:** You MUST add detailed logs to all application flows (Handlers, Services, Background Tasks) to ensure full observability.
 - **Clean Code:** Adhere to SOLID principles and DRY. Prefer composition over inheritance.
 - **Safety:** Never commit secrets or connection strings; use `appsettings.json` with placeholders or environment variables.
