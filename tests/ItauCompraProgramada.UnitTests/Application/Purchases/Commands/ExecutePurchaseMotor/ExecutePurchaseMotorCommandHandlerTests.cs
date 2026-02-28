@@ -7,6 +7,7 @@ using FluentAssertions;
 using ItauCompraProgramada.Application.Purchases.Commands.ExecutePurchaseMotor;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -19,6 +20,7 @@ public class ExecutePurchaseMotorCommandHandlerTests
     private readonly Mock<IPurchaseOrderRepository> _purchaseOrderRepositoryMock;
     private readonly Mock<ICustodyRepository> _custodyRepositoryMock;
     private readonly Mock<IRecommendationBasketRepository> _recommendationBasketRepositoryMock;
+    private readonly Mock<ILogger<ExecutePurchaseMotorCommandHandler>> _loggerMock;
     private readonly ExecutePurchaseMotorCommandHandler _handler;
 
     public ExecutePurchaseMotorCommandHandlerTests()
@@ -28,13 +30,15 @@ public class ExecutePurchaseMotorCommandHandlerTests
         _purchaseOrderRepositoryMock = new Mock<IPurchaseOrderRepository>();
         _custodyRepositoryMock = new Mock<ICustodyRepository>();
         _recommendationBasketRepositoryMock = new Mock<IRecommendationBasketRepository>();
+        _loggerMock = new Mock<ILogger<ExecutePurchaseMotorCommandHandler>>();
 
         _handler = new ExecutePurchaseMotorCommandHandler(
             _clientRepositoryMock.Object,
             _stockQuoteRepositoryMock.Object,
             _purchaseOrderRepositoryMock.Object,
             _custodyRepositoryMock.Object,
-            _recommendationBasketRepositoryMock.Object);
+            _recommendationBasketRepositoryMock.Object,
+            _loggerMock.Object);
     }
 
     [Fact]
