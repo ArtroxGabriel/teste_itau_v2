@@ -19,6 +19,7 @@ public class ItauDbContext : DbContext
     public DbSet<StockQuote> StockQuotes => Set<StockQuote>();
     public DbSet<Rebalancing> Rebalancings => Set<Rebalancing>();
     public DbSet<StoredEvent> StoredEvents => Set<StoredEvent>();
+    public DbSet<ContributionUpdate> ContributionUpdates => Set<ContributionUpdate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

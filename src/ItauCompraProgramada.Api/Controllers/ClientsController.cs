@@ -1,5 +1,7 @@
 using ItauCompraProgramada.Api.Models;
 using ItauCompraProgramada.Application.Clients.Commands.CreateClient;
+using ItauCompraProgramada.Application.Clients.Commands.DeactivateClient;
+using ItauCompraProgramada.Application.Clients.Commands.UpdateClientContribution;
 using ItauCompraProgramada.Application.Clients.Queries.GetClientWallet;
 using ItauCompraProgramada.Application.Clients.Queries.GetDetailedPerformance;
 
@@ -39,6 +41,26 @@ public class ClientsController(IMediator mediator) : ControllerBase
         );
 
         return CreatedAtAction(nameof(GetWallet), new { clienteId = result.Id }, response);
+    }
+
+    [HttpPost("{clienteId}/saida")]
+    public async Task<ActionResult<DeactivateClientResponse>> Leave(long clienteId, [FromHeader(Name = "X-Correlation-Id")] string? correlationId)
+    {
+        var cid = correlationId ?? Guid.NewGuid().ToString();
+        var command = new DeactivateClientCommand(clienteId, cid);
+        
+        var result = await mediator.Send(command);
+        return Ok(result);
+    }
+
+    [HttpPut("{clienteId}/valor-mensal")]
+    public async Task<ActionResult<UpdateClientContributionResponse>> UpdateMonthlyContribution(long clienteId, [FromBody] UpdateMonthlyContributionRequest request, [FromHeader(Name = "X-Correlation-Id")] string? correlationId)
+    {
+        var cid = correlationId ?? Guid.NewGuid().ToString();
+        var command = new UpdateClientContributionCommand(clienteId, request.NovoValorMensal, cid);
+        
+        var result = await mediator.Send(command);
+        return Ok(result);
     }
 
     [HttpGet("{clienteId}/carteira")]

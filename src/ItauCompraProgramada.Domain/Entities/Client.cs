@@ -17,6 +17,8 @@ public class Client
 
     // Navigation
     public virtual GraphicAccount? GraphicAccount { get; private set; }
+    public virtual IReadOnlyCollection<ContributionUpdate> ContributionHistory => _contributionHistory.AsReadOnly();
+    private readonly List<ContributionUpdate> _contributionHistory = [];
 
     protected Client() { } // EF Constructor
 
@@ -53,6 +55,9 @@ public class Client
     {
         if (newValue < 100m)
             throw new ArgumentException("Monthly contribution must be at least R$ 100,00.");
+            
+        var oldValue = MonthlyContribution;
         MonthlyContribution = newValue;
+        _contributionHistory.Add(new ContributionUpdate(Id, oldValue, newValue));
     }
 }
