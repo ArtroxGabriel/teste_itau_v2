@@ -13,7 +13,7 @@
     - [ ] RN-050: Rebalance on Proportion Drift (Postponed)
 - [x] **US05: B3 Data Integration**: Parse `COTAHIST` files to get closing prices.
 - [x] **US06: Tax Reporting (Kafka)**: Calculate IR Dedo-duro and Profit Tax and publish to Kafka.
-- [ ] **US07: Client Dashboard**: View portfolio, average prices, and detailed profitability (P/L).
+- [x] **US07: Client Dashboard**: View portfolio, average prices, and detailed profitability (P/L).
 
 ## Technical Tasks
 - [x] Initial Environment Setup
@@ -21,6 +21,6 @@
 - [x] Infrastructure Setup (MySQL + EF Core)
 - [x] B3 COTAHIST Parser
 - [x] Resiliency & Idempotency Pipeline
-- [in_progress] Refactor: ExecutePurchaseMotorCommandHandler (Break down complex logic)
-- [ ] Code Quality: Enforce linting and formatting
-- [ ] API Development: US07 Endpoints
+- [x] Refactor: ExecutePurchaseMotorCommandHandler (Break down complex logic)
+- [x] Code Quality: Enforce linting and formatting
+- [x] API Development: US07 Endpoints
