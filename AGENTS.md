@@ -65,7 +65,7 @@ Example: `feat(domain): add Client entity with validation rules`
 
 ## 📋 Requirements Alignment
 
-All development MUST align with the documents in the `requirements/` directory:
+All development MUST align with the documents in the `requirements/` directory. **You MUST validate and verify the requirements during the planning phase, before starting any development task.**
 
 - **`desafio-tecnico-compra-programada.md`**: Main challenge overview.
 - **`regras-negocio-detalhadas.md`**: Critical business rules (RN-XXX). Refer to these by ID in commit messages or code comments if logic is complex.
@@ -180,5 +180,5 @@ All development MUST align with the documents in the `requirements/` directory:
 - **Tests:** Every new feature in `Application` or `Domain` MUST have corresponding unit tests.
 - **Logging:** You MUST add detailed logs to all application flows (Handlers, Services, Background Tasks) to ensure full observability.
 - **Task Sequentiality & Approval:** Do not switch to a new task until the current one is either completed or explicitly pivoted/cancelled by the user. If a new request is made while another task is in progress, ask for explicit permission to switch or confirm if the current task should be finished first.
-- **Clean Code:** Adhere to SOLID principles and DRY. Prefer composition over inheritance.
+- **Clean Code:** Adhere to SOLID principles and DRY. Prefer composition over inheritance. Avoid "super methods" (methods that perform too many distinct actions). Prefer splitting logic into focused private methods, using the main method as an orchestrator.
 - **Safety:** Never commit secrets or connection strings; use `appsettings.json` with placeholders or environment variables.
