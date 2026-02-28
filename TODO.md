@@ -2,10 +2,10 @@
 
 ## User Stories (Backlog)
 
-- [/] **US01: Product Adhesion & Management**: Join/leave the "Top Five" product and manage monthly contribution.
+- [x] **US01: Product Adhesion & Management**: Join/leave the "Top Five" product and manage monthly contribution.
     - [x] Client Adhesion (Join)
-    - [ ] Client Exit (Leave)
-    - [ ] Update Monthly Contribution
+    - [x] Client Exit (Leave)
+    - [x] Update Monthly Contribution
 - [ ] **US02: Admin Recommendation Basket**: Manage "Top Five" basket (exactly 5 stocks, 100% total).
 - [x] **US03: Automated Purchase Motor**: Execute consolidated purchases on days 5, 15, and 25.
 - [/] **US04: Portfolio Rebalancing**: Rebalance client portfolios when basket changes or proportions drift.
