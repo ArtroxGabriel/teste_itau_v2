@@ -1,5 +1,7 @@
 using FluentAssertions;
+
 using ItauCompraProgramada.Application.Taxes.Services;
+
 using Xunit;
 
 namespace ItauCompraProgramada.UnitTests.Application.Taxes.Services;
@@ -27,9 +29,9 @@ public class TaxServiceTests
     {
         decimal totalSalesInMonth = 19999.99m;
         decimal totalProfit = 1000m;
-        
+
         var result = _taxService.CalculateProfitTax(totalSalesInMonth, totalProfit);
-        
+
         result.Should().Be(0m);
     }
 
@@ -38,9 +40,9 @@ public class TaxServiceTests
     {
         decimal totalSalesInMonth = 20000.01m;
         decimal totalProfit = 1000m; // 20% of 1000 = 200
-        
+
         var result = _taxService.CalculateProfitTax(totalSalesInMonth, totalProfit);
-        
+
         result.Should().Be(200m);
     }
 
@@ -49,9 +51,9 @@ public class TaxServiceTests
     {
         decimal totalSalesInMonth = 25000m;
         decimal totalProfit = -500m; // Loss
-        
+
         var result = _taxService.CalculateProfitTax(totalSalesInMonth, totalProfit);
-        
+
         result.Should().Be(0m);
     }
 }

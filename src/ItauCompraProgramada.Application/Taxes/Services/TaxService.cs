@@ -18,7 +18,7 @@ public class TaxService
     {
         // RN-058: Se o total de vendas <= R$ 20.000,00: ISENTO
         if (totalSalesInMonth <= ISENCAO_LIMIT) return 0m;
-        
+
         // RN-061: Se houver prejuizo, o IR e R$ 0,00
         if (totalProfit <= 0) return 0m;
 
