@@ -96,6 +96,14 @@ All development MUST align with the documents in the `requirements/` directory:
 
 ### 3. Clean Architecture Implementation
 
+- **CQRS & MediatR Pipeline:**
+  - All operations MUST use MediatR `IRequest`.
+  - Commands and Queries are handled by specific Handlers.
+  - The pipeline follows: `LoggingBehavior` -> `ValidationBehavior` -> `ResiliencyBehavior`.
+- **Resiliency & Idempotency:**
+  - A `StoredEvent` table (Event Sourcing lite) tracks completed commands.
+  - `ResiliencyBehavior` intercepts commands with a `CorrelationId`.
+  - If a command was already processed, it returns the cached `ResponsePayload` (JSON) from `StoredEvent` instead of re-executing logic.
 - **Domain Layer:**
   - The core of the application.
   - Contains Entities, Value Objects, Domain Exceptions, and Repository Interfaces.
@@ -118,6 +126,10 @@ All development MUST align with the documents in the `requirements/` directory:
 
 ### 4. Error Handling and Results
 
+- **Structured Logging:**
+  - Use Serilog for all logging.
+  - Production logs MUST be in JSON format for observability.
+  - Include relevant context (CorrelationId, ClientId, Ticker) in log messages.
 - **Business Failures:** Use a `Result<T>` or `OneOf` pattern to return success or failure without throwing exceptions for expected business rule violations.
 - **Exceptions:** Throw exceptions only for truly exceptional cases (e.g., database connection failure, unexpected nulls).
 - **Validation:** Use `FluentValidation` for request validation in the Application layer.
