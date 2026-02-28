@@ -41,9 +41,9 @@ Always prioritize unit tests for `Domain` and `Application` layers. Use `Moq` or
 
 ## 🛰 Git Commit Conventions
 
-- **Branching Strategy**: ALWAYS create a new branch from `main` before starting any feature implementation, bug fix, or refactoring.
-- **Atomic Commits**: Avoid mixing different contexts in the same commit. For example, guideline updates (AGENTS.md) should be committed separately from feature code implementation.
-- **Commit after changes**: ALWAYS commit your code after completing a logical unit of work (feature, refactor, fix, etc.).
+- **Branching Strategy**: You are allowed to commit directly to the `main` branch.
+- **Atomic Commits**: Each commit MUST have a single, clear purpose. NEVER mix different contexts (e.g., feature development with bug fixes, or refactoring with documentation updates) in the same commit. Guideline updates (like AGENTS.md) must be committed separately.
+- **Commit after changes**: ALWAYS commit your code immediately after completing a logical unit of work or finishing a specific task.
 - **Correlated Changes**: If the new changes are directly related to the previous commit and it hasn't been pushed yet, you may use `git commit --amend` to keep the history clean.
 - **Commit Format**: Follow the **Conventional Commits** specification:
 - **Format**: `<type>(<scope>): <description>`
