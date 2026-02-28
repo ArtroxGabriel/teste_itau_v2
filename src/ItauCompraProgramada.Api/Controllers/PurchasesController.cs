@@ -1,6 +1,8 @@
 using System;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
+using ItauCompraProgramada.Api.Models;
 using ItauCompraProgramada.Application.Purchases.Commands.ExecutePurchaseMotor;
 
 using MediatR;
@@ -10,18 +12,22 @@ using Microsoft.AspNetCore.Mvc;
 namespace ItauCompraProgramada.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/motor")]
 public class PurchasesController(IMediator mediator) : ControllerBase
 {
-    [HttpPost("execute-motor")]
-    public async Task<IActionResult> ExecuteMotor([FromQuery] DateTime? date, [FromQuery] string? correlationId)
+    [HttpPost("executar-compra")]
+    public async Task<IActionResult> ExecuteMotor([FromBody] ExecutePurchaseMotorRequest request, [FromHeader(Name = "X-Correlation-Id")] string? correlationId)
     {
-        var executionDate = date ?? DateTime.UtcNow;
+        var executionDate = request.DataReferencia ?? DateTime.UtcNow;
         var cid = correlationId ?? $"Manual-PurchaseMotor-{executionDate:yyyy-MM-dd}";
 
         var command = new ExecutePurchaseMotorCommand(executionDate, cid);
         await mediator.Send(command);
 
-        return Ok(new { Message = "Purchase Motor execution triggered.", ExecutionDate = executionDate, CorrelationId = cid });
+        // Retornar um modelo basico por enquanto. O contrato real e extenso e exige retornar distribuicoes.
+        return Ok(new { 
+            mensagem = "Compra programada executada com sucesso.", 
+            dataExecucao = executionDate 
+        });
     }
 }
