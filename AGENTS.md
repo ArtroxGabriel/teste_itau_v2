@@ -43,6 +43,8 @@ Always prioritize unit tests for `Domain` and `Application` layers. Use `Moq` or
 
 - **Branching Strategy**: ALWAYS create a new branch from `main` before starting any feature implementation, bug fix, or refactoring.
 - **Atomic Commits**: Avoid mixing different contexts in the same commit. For example, guideline updates (AGENTS.md) should be committed separately from feature code implementation.
+- **Commit after changes**: ALWAYS commit your code after completing a logical unit of work (feature, refactor, fix, etc.).
+- **Correlated Changes**: If the new changes are directly related to the previous commit and it hasn't been pushed yet, you may use `git commit --amend` to keep the history clean.
 - **Commit Format**: Follow the **Conventional Commits** specification:
 - **Format**: `<type>(<scope>): <description>`
 - **Types**:
@@ -96,6 +98,14 @@ All development MUST align with the documents in the `requirements/` directory:
 
 ### 3. Clean Architecture Implementation
 
+- **CQRS & MediatR Pipeline:**
+  - All operations MUST use MediatR `IRequest`.
+  - Commands and Queries are handled by specific Handlers.
+  - The pipeline follows: `LoggingBehavior` -> `ValidationBehavior` -> `ResiliencyBehavior`.
+- **Resiliency & Idempotency:**
+  - A `StoredEvent` table (Event Sourcing lite) tracks completed commands.
+  - `ResiliencyBehavior` intercepts commands with a `CorrelationId`.
+  - If a command was already processed, it returns the cached `ResponsePayload` (JSON) from `StoredEvent` instead of re-executing logic.
 - **Domain Layer:**
   - The core of the application.
   - Contains Entities, Value Objects, Domain Exceptions, and Repository Interfaces.
@@ -118,6 +128,10 @@ All development MUST align with the documents in the `requirements/` directory:
 
 ### 4. Error Handling and Results
 
+- **Structured Logging:**
+  - Use Serilog for all logging.
+  - Production logs MUST be in JSON format for observability.
+  - Include relevant context (CorrelationId, ClientId, Ticker) in log messages.
 - **Business Failures:** Use a `Result<T>` or `OneOf` pattern to return success or failure without throwing exceptions for expected business rule violations.
 - **Exceptions:** Throw exceptions only for truly exceptional cases (e.g., database connection failure, unexpected nulls).
 - **Validation:** Use `FluentValidation` for request validation in the Application layer.
@@ -164,5 +178,7 @@ All development MUST align with the documents in the `requirements/` directory:
 - **Proactiveness:** If you add a new service, remember to register it in the DI container.
 - **Migrations:** When changing Domain Entities, generate a new EF Core migration in the Infrastructure project.
 - **Tests:** Every new feature in `Application` or `Domain` MUST have corresponding unit tests.
+- **Logging:** You MUST add detailed logs to all application flows (Handlers, Services, Background Tasks) to ensure full observability.
+- **Task Sequentiality & Approval:** Do not switch to a new task until the current one is either completed or explicitly pivoted/cancelled by the user. If a new request is made while another task is in progress, ask for explicit permission to switch or confirm if the current task should be finished first.
 - **Clean Code:** Adhere to SOLID principles and DRY. Prefer composition over inheritance.
 - **Safety:** Never commit secrets or connection strings; use `appsettings.json` with placeholders or environment variables.

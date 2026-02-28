@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Domain.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,6 +24,12 @@ public class GraphicAccountMapping : IEntityTypeConfiguration<GraphicAccount>
             .IsRequired()
             .HasConversion<string>()
             .HasColumnName("Tipo");
+
+        builder.Property(ga => ga.Balance)
+            .IsRequired()
+            .HasPrecision(18, 2)
+            .HasDefaultValue(0)
+            .HasColumnName("Saldo");
 
         builder.Property(ga => ga.CreatedAt)
             .IsRequired()

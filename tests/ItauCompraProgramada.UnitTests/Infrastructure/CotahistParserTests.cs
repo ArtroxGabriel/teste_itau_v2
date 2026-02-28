@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+
 using ItauCompraProgramada.Infrastructure.ExternalServices;
+
 using Xunit;
 
 namespace ItauCompraProgramada.UnitTests.Infrastructure;
@@ -20,7 +22,7 @@ public class CotahistParserTests
         content.AppendLine("00COTAHIST.2026BOVESPA 20260226");
         content.AppendLine(SampleLine);
         content.AppendLine("99COTAHIST.2026BOVESPA 000000000000002");
-        
+
         File.WriteAllText(filePath, content.ToString(), Encoding.GetEncoding("ISO-8859-1"));
         var parser = new CotahistParser();
 

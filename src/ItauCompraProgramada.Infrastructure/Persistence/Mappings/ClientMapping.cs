@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Domain.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -41,6 +42,11 @@ public class ClientMapping : IEntityTypeConfiguration<Client>
         builder.Property(c => c.AdhesionDate)
             .IsRequired()
             .HasColumnName("DataAdesao");
+
+        builder.Property(c => c.NextPurchaseDay)
+            .IsRequired()
+            .HasDefaultValue(5)
+            .HasColumnName("DiaExecucao");
 
         builder.HasOne(c => c.GraphicAccount)
             .WithOne(ga => ga.Client)

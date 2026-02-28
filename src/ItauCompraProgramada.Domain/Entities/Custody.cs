@@ -28,7 +28,7 @@ public class Custody
     public void UpdateAveragePrice(int newQuantity, decimal unitPrice)
     {
         if (newQuantity <= 0) return;
-        
+
         AveragePrice = (Quantity * AveragePrice + newQuantity * unitPrice) / (Quantity + newQuantity);
         Quantity += newQuantity;
         LastUpdatedAt = DateTime.UtcNow;
@@ -38,7 +38,7 @@ public class Custody
     {
         if (quantity > Quantity)
             throw new InvalidOperationException("Insufficient quantity in custody.");
-            
+
         Quantity -= quantity;
         LastUpdatedAt = DateTime.UtcNow;
     }

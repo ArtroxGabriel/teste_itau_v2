@@ -83,6 +83,12 @@ namespace ItauCompraProgramada.Infrastructure.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("Nome");
 
+                    b.Property<int>("NextPurchaseDay")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(5)
+                        .HasColumnName("DiaExecucao");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Cpf")
@@ -175,6 +181,13 @@ namespace ItauCompraProgramada.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasColumnName("NumeroConta");
+
+                    b.Property<decimal>("Balance")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("Saldo");
 
                     b.Property<long>("ClienteId")
                         .HasColumnType("bigint");
@@ -382,6 +395,43 @@ namespace ItauCompraProgramada.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Cotacoes", (string)null);
+                });
+
+            modelBuilder.Entity("ItauCompraProgramada.Domain.Entities.StoredEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("EventName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("ResponsePayload")
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.ToTable("stored_events", (string)null);
                 });
 
             modelBuilder.Entity("ItauCompraProgramada.Domain.Entities.BasketItem", b =>
