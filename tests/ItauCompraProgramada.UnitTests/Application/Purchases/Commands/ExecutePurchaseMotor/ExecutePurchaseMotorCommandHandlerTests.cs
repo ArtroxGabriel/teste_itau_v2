@@ -3,15 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+
 using FluentAssertions;
+
 using ItauCompraProgramada.Application.Interfaces;
 using ItauCompraProgramada.Application.Purchases.Commands.ExecutePurchaseMotor;
 using ItauCompraProgramada.Application.Taxes.Services;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
 using ItauCompraProgramada.Domain.Repositories;
+
 using Microsoft.Extensions.Logging;
+
 using Moq;
+
 using Xunit;
 
 namespace ItauCompraProgramada.UnitTests.Application.Purchases.Commands.ExecutePurchaseMotor;
@@ -76,7 +81,7 @@ public class ExecutePurchaseMotorCommandHandlerTests
         _clientRepositoryMock.Setup(r => r.GetClientsForExecutionAsync(executionDate.Day)).ReturnsAsync(new List<Client> { client });
         _custodyRepositoryMock.Setup(r => r.GetByAccountIdAsync(1)).ReturnsAsync(new List<Custody>()); // Master Account
         _custodyRepositoryMock.Setup(r => r.GetByAccountIdAsync(client.GraphicAccount!.Id)).ReturnsAsync(new List<Custody>()); // Client Account
-        
+
         _recommendationBasketRepositoryMock.Setup(r => r.GetActiveAsync()).ReturnsAsync((RecommendationBasket)null);
         _irEventRepositoryMock.Setup(r => r.GetPendingPublicationAsync()).ReturnsAsync(new List<IREvent>());
         _purchaseOrderRepositoryMock.Setup(r => r.GetTotalSalesValueInMonthAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);

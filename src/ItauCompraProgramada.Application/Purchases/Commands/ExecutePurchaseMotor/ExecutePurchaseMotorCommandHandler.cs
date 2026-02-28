@@ -4,7 +4,9 @@ using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Enums;
 using ItauCompraProgramada.Domain.Interfaces;
 using ItauCompraProgramada.Domain.Repositories;
+
 using MediatR;
+
 using Microsoft.Extensions.Logging;
 
 namespace ItauCompraProgramada.Application.Purchases.Commands.ExecutePurchaseMotor;
@@ -47,23 +49,44 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
     {
         _logger.LogInformation("ExecutePurchaseMotorCommand started. Date: {Date}", request.ExecutionDate);
 
-        // 1. Identify Clients Scheduled for Today
-        var clients = await _clientRepository.GetClientsForExecutionAsync(request.ExecutionDate.Day);
+        var clients = await GetScheduledClientsAsync(request.ExecutionDate.Day);
+        if (!clients.Any()) return;
+
+        var top5Quotes = await DetermineAndRefreshTop5BasketAsync(request.ExecutionDate);
+
+        decimal totalContribution = clients.Sum(c => c.MonthlyContribution / 3);
+        await ExecuteConsolidatedPurchaseAndDistributionAsync(clients, top5Quotes, totalContribution);
+
+        await ProcessRebalancingSalesAsync(clients, top5Quotes, request.ExecutionDate);
+
+        await SaveChangesAsync();
+        await PublishTaxEventsAsync();
+
+        _logger.LogInformation("ExecutePurchaseMotorCommand completed successfully.");
+    }
+
+    private async Task<List<Client>> GetScheduledClientsAsync(int day)
+    {
+        var clients = await _clientRepository.GetClientsForExecutionAsync(day);
         if (!clients.Any())
         {
-            _logger.LogInformation("No clients scheduled for execution today ({Day}).", request.ExecutionDate.Day);
-            return;
+            _logger.LogInformation("No clients scheduled for execution today ({Day}).", day);
         }
+        else
+        {
+            _logger.LogInformation("Processing {Count} clients for day {Day}.", clients.Count, day);
+        }
+        return clients;
+    }
 
-        _logger.LogInformation("Processing {Count} clients for day {Day}.", clients.Count, request.ExecutionDate.Day);
-
-        // 2. Calculate Top 5
-        var quotes = await _stockQuoteRepository.GetLatestQuotesAsync(request.ExecutionDate);
+    private async Task<List<StockQuote>> DetermineAndRefreshTop5BasketAsync(DateTime date)
+    {
+        var quotes = await _stockQuoteRepository.GetLatestQuotesAsync(date);
         var top5Quotes = quotes
-            .Select(q => new 
-            { 
-                Quote = q, 
-                Performance = q.OpeningPrice > 0 ? (q.ClosingPrice - q.OpeningPrice) / q.OpeningPrice : 0 
+            .Select(q => new
+            {
+                Quote = q,
+                Performance = q.OpeningPrice > 0 ? (q.ClosingPrice - q.OpeningPrice) / q.OpeningPrice : 0
             })
             .OrderByDescending(x => x.Performance)
             .Take(5)
@@ -76,220 +99,191 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
             throw new InvalidOperationException("Not enough quotes to determine Top 5.");
         }
 
-        var top5Tickers = string.Join(", ", top5Quotes.Select(q => q.Ticker));
-        _logger.LogInformation("Top 5 stocks identified: {Tickers}", top5Tickers);
+        _logger.LogInformation("Top 5 stocks identified: {Tickers}", string.Join(", ", top5Quotes.Select(q => q.Ticker)));
 
-        // 3. Update Recommendation Basket
         var basketItems = top5Quotes.Select(q => new BasketItem(q.Ticker, 20m)).ToList();
-        var newBasket = new RecommendationBasket($"Top 5 - {request.ExecutionDate:yyyy-MM-dd}", basketItems);
+        var newBasket = new RecommendationBasket($"Top 5 - {date:yyyy-MM-dd}", basketItems);
         var previousBasket = await _recommendationBasketRepository.GetActiveAsync();
         previousBasket?.Deactivate();
         await _recommendationBasketRepository.AddAsync(newBasket);
-        _logger.LogInformation("Recommendation basket updated to active.");
 
-        // 4. Consolidate Contributions (1/3 of monthly)
-        decimal totalConsolidatedContribution = clients.Sum(c => c.MonthlyContribution / 3);
-        decimal contributionPerStock = totalConsolidatedContribution / 5;
-        _logger.LogInformation("Total consolidated contribution: {Total}. Contribution per stock: {PerStock}.", totalConsolidatedContribution, contributionPerStock);
+        return top5Quotes;
+    }
 
-        // 5. Identify Master Account (Assuming it's AccountId 1 for now)
+    private async Task ExecuteConsolidatedPurchaseAndDistributionAsync(List<Client> clients, List<StockQuote> top5Quotes, decimal totalContribution)
+    {
+        decimal contributionPerStock = totalContribution / 5;
         var masterAccountCustodies = await _custodyRepository.GetByAccountIdAsync(1);
 
         foreach (var quote in top5Quotes)
         {
-            _logger.LogDebug("Processing stock {Ticker}. Consolidating buy and distribution.", quote.Ticker);
-
-            // Total quantity needed for the day
             int totalQuantityNeeded = (int)(contributionPerStock / quote.ClosingPrice);
             if (totalQuantityNeeded <= 0) continue;
 
-            // Check Master Custody
             var masterCustody = masterAccountCustodies.FirstOrDefault(c => c.Ticker == quote.Ticker);
             int masterBalance = masterCustody?.Quantity ?? 0;
-
-            // Quantity to actually buy
             int quantityToBuy = Math.Max(0, totalQuantityNeeded - masterBalance);
 
             if (quantityToBuy > 0)
             {
-                // Separate Standard (100x) and Fractional
-                int standardQuantity = (quantityToBuy / 100) * 100;
-                int fractionalQuantity = quantityToBuy % 100;
-
-                if (standardQuantity > 0)
-                {
-                    await _purchaseOrderRepository.AddAsync(new PurchaseOrder(1, quote.Ticker, standardQuantity, quote.ClosingPrice, MarketType.Standard));
-                }
-
-                if (fractionalQuantity > 0)
-                {
-                    await _purchaseOrderRepository.AddAsync(new PurchaseOrder(1, quote.Ticker + "F", fractionalQuantity, quote.ClosingPrice, MarketType.Fractional));
-                }
-                
-                _logger.LogInformation("Buy orders created for {Ticker}: {Total} ({Standard} Standard, {Fractional} Fractional).", quote.Ticker, quantityToBuy, standardQuantity, fractionalQuantity);
+                await CreateMasterPurchaseOrdersAsync(quote, quantityToBuy);
             }
 
-            // 6. Distribute to Clients
-            int totalAvailableForDistribution = masterBalance + quantityToBuy;
-            int distributedCount = 0;
+            int totalAvailable = masterBalance + quantityToBuy;
+            int distributedCount = await DistributeStockToClientsAsync(clients, quote, totalAvailable, totalContribution);
 
-            foreach (var client in clients)
-            {
-                if (client.GraphicAccount == null) continue;
-
-                // Client proportion = Client aporte / Total aporte
-                decimal proportion = (client.MonthlyContribution / 3) / totalConsolidatedContribution;
-                int clientQuantity = (int)(totalAvailableForDistribution * proportion);
-                if (clientQuantity <= 0) continue;
-
-                distributedCount += clientQuantity;
-
-                // Update Client Custody
-                var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount.Id);
-                var clientCustody = clientCustodies.FirstOrDefault(c => c.Ticker == quote.Ticker);
-
-                if (clientCustody != null)
-                {
-                    clientCustody.UpdateAveragePrice(clientQuantity, quote.ClosingPrice);
-                }
-                else
-                {
-                    await _custodyRepository.AddAsync(new Custody(client.GraphicAccount.Id, quote.Ticker, clientQuantity, quote.ClosingPrice));
-                }
-
-                // Deduct from client's graphic account balance (which was initial aporte)
-                var operationValue = clientQuantity * quote.ClosingPrice;
-                client.GraphicAccount.SubtractBalance(operationValue);
-
-                // RN-053: IR Dedo-duro on Purchase Distribution
-                var irDedoDuro = _taxService.CalculateIrDedoDuro(operationValue);
-                if (irDedoDuro > 0)
-                {
-                    await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, operationValue, irDedoDuro));
-                    _logger.LogInformation("IR Dedo-duro of {Value} calculated for client {ClientId} on {Ticker} purchase.", irDedoDuro, client.Id, quote.Ticker);
-                }
-            }
-
-            // 7. Update Master Custody with Residue
-            int residue = totalAvailableForDistribution - distributedCount;
-            if (masterCustody != null)
-            {
-                masterCustody.SubtractQuantity(masterBalance); // Remove old
-                masterCustody.UpdateAveragePrice(residue, quote.ClosingPrice); // Add residue
-            }
-            else if (residue > 0)
-            {
-                await _custodyRepository.AddAsync(new Custody(1, quote.Ticker, residue, quote.ClosingPrice));
-            }
-            
-            _logger.LogDebug("Distributed {Count} of {Ticker}. Residue on Master: {Residue}.", distributedCount, quote.Ticker, residue);
+            await UpdateMasterResidueAsync(masterCustody, quote, totalAvailable - distributedCount, masterBalance);
         }
+    }
 
-        // 8. Rebalancing (Sell old tickers)
-        _logger.LogInformation("Starting portfolio rebalancing for clients.");
-        var currentTop5Tickers = top5Quotes.Select(q => q.Ticker).ToList();
+    private async Task CreateMasterPurchaseOrdersAsync(StockQuote quote, int quantityToBuy)
+    {
+        int standardQuantity = (quantityToBuy / 100) * 100;
+        int fractionalQuantity = quantityToBuy % 100;
+
+        if (standardQuantity > 0)
+            await _purchaseOrderRepository.AddAsync(new PurchaseOrder(1, quote.Ticker, standardQuantity, quote.ClosingPrice, MarketType.Standard));
+
+        if (fractionalQuantity > 0)
+            await _purchaseOrderRepository.AddAsync(new PurchaseOrder(1, quote.Ticker + "F", fractionalQuantity, quote.ClosingPrice, MarketType.Fractional));
+
+        _logger.LogInformation("Buy orders created for {Ticker}: {Total} ({Standard} Std, {Fractional} Frac).",
+            quote.Ticker, quantityToBuy, standardQuantity, fractionalQuantity);
+    }
+
+    private async Task<int> DistributeStockToClientsAsync(List<Client> clients, StockQuote quote, int totalAvailable, decimal totalContribution)
+    {
+        int distributedCount = 0;
         foreach (var client in clients)
         {
             if (client.GraphicAccount == null) continue;
-            var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount.Id);
-            var toSell = clientCustodies.Where(c => !currentTop5Tickers.Contains(c.Ticker) && c.Quantity > 0).ToList();
 
-            decimal currentExecutionSales = 0m;
-            decimal currentExecutionProfit = 0m;
+            decimal proportion = (client.MonthlyContribution / 3) / totalContribution;
+            int clientQuantity = (int)(totalAvailable * proportion);
+            if (clientQuantity <= 0) continue;
+
+            distributedCount += clientQuantity;
+            await UpdateClientCustodyAndBalanceAsync(client, quote, clientQuantity);
+        }
+        return distributedCount;
+    }
+
+    private async Task UpdateClientCustodyAndBalanceAsync(Client client, StockQuote quote, int quantity)
+    {
+        var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount!.Id);
+        var clientCustody = clientCustodies.FirstOrDefault(c => c.Ticker == quote.Ticker);
+
+        if (clientCustody != null)
+            clientCustody.UpdateAveragePrice(quantity, quote.ClosingPrice);
+        else
+            await _custodyRepository.AddAsync(new Custody(client.GraphicAccount.Id, quote.Ticker, quantity, quote.ClosingPrice));
+
+        var operationValue = quantity * quote.ClosingPrice;
+        client.GraphicAccount.SubtractBalance(operationValue);
+
+        var irDedoDuro = _taxService.CalculateIrDedoDuro(operationValue);
+        if (irDedoDuro > 0)
+        {
+            await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, operationValue, irDedoDuro));
+        }
+    }
+
+    private async Task UpdateMasterResidueAsync(Custody? masterCustody, StockQuote quote, int residue, int oldBalance)
+    {
+        if (masterCustody != null)
+        {
+            masterCustody.SubtractQuantity(oldBalance);
+            masterCustody.UpdateAveragePrice(residue, quote.ClosingPrice);
+        }
+        else if (residue > 0)
+        {
+            await _custodyRepository.AddAsync(new Custody(1, quote.Ticker, residue, quote.ClosingPrice));
+        }
+    }
+
+    private async Task ProcessRebalancingSalesAsync(List<Client> clients, List<StockQuote> top5Quotes, DateTime executionDate)
+    {
+        _logger.LogInformation("Starting portfolio rebalancing for clients.");
+        var top5Tickers = top5Quotes.Select(q => q.Ticker).ToList();
+
+        foreach (var client in clients)
+        {
+            if (client.GraphicAccount == null) continue;
+
+            var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount.Id);
+            var toSell = clientCustodies.Where(c => !top5Tickers.Contains(c.Ticker) && c.Quantity > 0).ToList();
+
+            decimal executionSales = 0m;
+            decimal executionProfit = 0m;
 
             foreach (var custody in toSell)
             {
-                var currentQuote = await _stockQuoteRepository.GetLatestByTickerAsync(custody.Ticker);
-                if (currentQuote == null) continue;
+                var quote = await _stockQuoteRepository.GetLatestByTickerAsync(custody.Ticker);
+                if (quote == null) continue;
 
-                var proceeds = (decimal)custody.Quantity * currentQuote.ClosingPrice;
-                var profit = (currentQuote.ClosingPrice - custody.AveragePrice) * custody.Quantity;
-                
-                currentExecutionSales += proceeds;
-                currentExecutionProfit += profit;
+                var proceeds = (decimal)custody.Quantity * quote.ClosingPrice;
+                var profit = (quote.ClosingPrice - custody.AveragePrice) * custody.Quantity;
+
+                executionSales += proceeds;
+                executionProfit += profit;
 
                 client.GraphicAccount.AddBalance(proceeds);
+                await _purchaseOrderRepository.AddAsync(new PurchaseOrder(client.GraphicAccount.Id, custody.Ticker, -custody.Quantity, quote.ClosingPrice, MarketType.Standard));
 
-                await _purchaseOrderRepository.AddAsync(new PurchaseOrder(client.GraphicAccount.Id, custody.Ticker, -custody.Quantity, currentQuote.ClosingPrice, MarketType.Standard));
-
-                // RN-053: IR Dedo-duro on Sales
                 var irDedoDuro = _taxService.CalculateIrDedoDuro(proceeds);
                 if (irDedoDuro > 0)
-                {
                     await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, proceeds, irDedoDuro));
-                    _logger.LogInformation("IR Dedo-duro of {Value} calculated for client {ClientId} on {Ticker} sale.", irDedoDuro, client.Id, custody.Ticker);
-                }
 
-                // RN-057 - RN-062: IR Profit Tax tracking (storing profit in BaseValue)
                 await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, profit, 0m));
-
                 custody.SubtractQuantity(custody.Quantity);
-                
-                _logger.LogInformation("Sold {Quantity} of {Ticker} for client {ClientId}. Proceeds: {Proceeds}. Profit: {Profit}.", custody.Quantity, custody.Ticker, client.Id, proceeds, profit);
             }
 
-            // Calculate Monthly Profit Tax (if total sales > 20k)
-            var totalPreviousSalesInMonth = await _purchaseOrderRepository.GetTotalSalesValueInMonthAsync(client.GraphicAccount.Id, request.ExecutionDate.Year, request.ExecutionDate.Month);
-            var totalSalesInMonth = totalPreviousSalesInMonth + currentExecutionSales;
+            await CalculateMonthlyProfitTaxAsync(client, executionSales, executionProfit, executionDate);
+        }
+    }
 
-            if (totalSalesInMonth > 20000m)
+    private async Task CalculateMonthlyProfitTaxAsync(Client client, decimal currentSales, decimal currentProfit, DateTime date)
+    {
+        var totalSales = await _purchaseOrderRepository.GetTotalSalesValueInMonthAsync(client.GraphicAccount!.Id, date.Year, date.Month) + currentSales;
+
+        if (totalSales > 20000m)
+        {
+            var totalProfit = await _irEventRepository.GetTotalBaseValueInMonthAsync(client.Id, IREventType.SalesProfit, date.Year, date.Month) + currentProfit;
+            var requiredTax = _taxService.CalculateProfitTax(totalSales, totalProfit);
+
+            if (requiredTax > 0)
             {
-                var totalPreviousProfitInMonth = await _irEventRepository.GetTotalBaseValueInMonthAsync(client.Id, IREventType.SalesProfit, request.ExecutionDate.Year, request.ExecutionDate.Month);
-                var totalProfitInMonth = totalPreviousProfitInMonth + currentExecutionProfit;
+                var paidTax = await _irEventRepository.GetTotalIRValueInMonthAsync(client.Id, IREventType.SalesProfit, date.Year, date.Month);
+                var taxToPayNow = requiredTax - paidTax;
 
-                var totalTaxRequired = _taxService.CalculateProfitTax(totalSalesInMonth, totalProfitInMonth);
-                
-                if (totalTaxRequired > 0)
-                {
-                    var totalTaxAlreadyPaid = await _irEventRepository.GetTotalIRValueInMonthAsync(client.Id, IREventType.SalesProfit, request.ExecutionDate.Year, request.ExecutionDate.Month);
-                    var taxToPayNow = totalTaxRequired - totalTaxAlreadyPaid;
-
-                    if (taxToPayNow > 0)
-                    {
-                        await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, 0m, taxToPayNow));
-                        _logger.LogInformation("IR Profit Tax of {Value} calculated for client {ClientId} (Total sales in month: {SalesValue}).", taxToPayNow, client.Id, totalSalesInMonth);
-                    }
-                }
+                if (taxToPayNow > 0)
+                    await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, 0m, taxToPayNow));
             }
         }
+    }
 
-        // Final Save
-        _logger.LogInformation("Finalizing changes. Saving to database.");
+    private async Task SaveChangesAsync()
+    {
         await _purchaseOrderRepository.SaveChangesAsync();
         await _clientRepository.SaveChangesAsync();
         await _recommendationBasketRepository.SaveChangesAsync();
         await _custodyRepository.SaveChangesAsync();
         await _irEventRepository.SaveChangesAsync();
+    }
 
-        // US06: Kafka Integration (Publish IR events)
-        _logger.LogInformation("Publishing IR events to Kafka.");
+    private async Task PublishTaxEventsAsync()
+    {
         var pendingEvents = await _irEventRepository.GetPendingPublicationAsync();
         foreach (var irEvent in pendingEvents)
         {
             var topic = irEvent.Type == IREventType.DedoDuro ? "ir-dedo-duro" : "ir-profit-tax";
-            
-            // Map to anonymous object for better JSON format
-            var message = new
-            {
-                irEvent.Id,
-                irEvent.ClienteId,
-                irEvent.Type,
-                irEvent.BaseValue,
-                irEvent.IRValue,
-                irEvent.EventDate,
-                Topic = topic
-            };
+            var message = new { irEvent.Id, irEvent.ClienteId, irEvent.Type, irEvent.BaseValue, irEvent.IRValue, irEvent.EventDate, Topic = topic };
 
             await _kafkaProducer.PublishAsync(topic, message);
             irEvent.MarkAsPublished();
         }
 
         if (pendingEvents.Any())
-        {
             await _irEventRepository.SaveChangesAsync();
-            _logger.LogInformation("{Count} IR events published and marked as successfully.", pendingEvents.Count);
-        }
-        
-        _logger.LogInformation("ExecutePurchaseMotorCommand completed successfully.");
     }
 }

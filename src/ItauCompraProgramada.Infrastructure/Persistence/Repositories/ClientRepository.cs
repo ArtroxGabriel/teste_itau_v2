@@ -17,6 +17,14 @@ public class ClientRepository(ItauDbContext dbContext) : IClientRepository
             .ToListAsync();
     }
 
+    public async Task<Client?> GetByIdAsync(long id)
+    {
+        return await dbContext.Clients
+            .Include(c => c.GraphicAccount)
+                .ThenInclude(ga => ga.Custodies)
+            .FirstOrDefaultAsync(c => c.Id == id);
+    }
+
     public async Task AddAsync(Client client)
     {
         await dbContext.Clients.AddAsync(client);

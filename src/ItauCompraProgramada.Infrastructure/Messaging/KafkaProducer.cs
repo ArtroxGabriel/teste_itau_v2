@@ -1,6 +1,9 @@
 using System.Text.Json;
+
 using Confluent.Kafka;
+
 using ItauCompraProgramada.Application.Interfaces;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -15,7 +18,7 @@ public class KafkaProducer : IKafkaProducer, IDisposable
     {
         _logger = logger;
         var bootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
-        
+
         var config = new ProducerConfig
         {
             BootstrapServers = bootstrapServers,
