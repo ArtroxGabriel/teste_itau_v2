@@ -8,5 +8,6 @@ namespace ItauCompraProgramada.Domain.Interfaces;
 public interface IDistributionRepository
 {
     Task<List<Distribution>> GetByClientIdAsync(long clientId);
+    Task AddAsync(Distribution distribution);
     Task SaveChangesAsync();
 }

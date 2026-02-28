@@ -21,6 +21,11 @@ public class DistributionRepository(ItauDbContext dbContext) : IDistributionRepo
             .ToListAsync();
     }
 
+    public async Task AddAsync(Distribution distribution)
+    {
+        await dbContext.Distributions.AddAsync(distribution);
+    }
+
     public async Task SaveChangesAsync()
     {
         await dbContext.SaveChangesAsync();

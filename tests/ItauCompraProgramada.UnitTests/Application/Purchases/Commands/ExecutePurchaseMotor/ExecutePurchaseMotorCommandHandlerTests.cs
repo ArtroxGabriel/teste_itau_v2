@@ -27,6 +27,7 @@ public class ExecutePurchaseMotorCommandHandlerTests
     private readonly Mock<IStockQuoteRepository> _stockQuoteRepositoryMock;
     private readonly Mock<IPurchaseOrderRepository> _purchaseOrderRepositoryMock;
     private readonly Mock<ICustodyRepository> _custodyRepositoryMock;
+    private readonly Mock<IDistributionRepository> _distributionRepositoryMock;
     private readonly Mock<IRecommendationBasketRepository> _recommendationBasketRepositoryMock;
     private readonly Mock<IIREventRepository> _irEventRepositoryMock;
     private readonly TaxService _taxService;
@@ -40,6 +41,7 @@ public class ExecutePurchaseMotorCommandHandlerTests
         _stockQuoteRepositoryMock = new Mock<IStockQuoteRepository>();
         _purchaseOrderRepositoryMock = new Mock<IPurchaseOrderRepository>();
         _custodyRepositoryMock = new Mock<ICustodyRepository>();
+        _distributionRepositoryMock = new Mock<IDistributionRepository>();
         _recommendationBasketRepositoryMock = new Mock<IRecommendationBasketRepository>();
         _irEventRepositoryMock = new Mock<IIREventRepository>();
         _taxService = new TaxService();
@@ -51,6 +53,7 @@ public class ExecutePurchaseMotorCommandHandlerTests
             _stockQuoteRepositoryMock.Object,
             _purchaseOrderRepositoryMock.Object,
             _custodyRepositoryMock.Object,
+            _distributionRepositoryMock.Object,
             _recommendationBasketRepositoryMock.Object,
             _irEventRepositoryMock.Object,
             _taxService,

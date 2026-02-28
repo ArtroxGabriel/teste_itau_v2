@@ -16,18 +16,23 @@ namespace ItauCompraProgramada.Api.Controllers;
 public class PurchasesController(IMediator mediator) : ControllerBase
 {
     [HttpPost("executar-compra")]
-    public async Task<IActionResult> ExecuteMotor([FromBody] ExecutePurchaseMotorRequest request, [FromHeader(Name = "X-Correlation-Id")] string? correlationId)
+    public async Task<ActionResult<ExecutePurchaseMotorResponse>> ExecuteMotor([FromBody] ExecutePurchaseMotorRequest request, [FromHeader(Name = "X-Correlation-Id")] string? correlationId)
     {
         var executionDate = request.DataReferencia ?? DateTime.UtcNow;
         var cid = correlationId ?? $"Manual-PurchaseMotor-{executionDate:yyyy-MM-dd}";
 
         var command = new ExecutePurchaseMotorCommand(executionDate, cid);
-        await mediator.Send(command);
+        var result = await mediator.Send(command);
 
-        // Retornar um modelo basico por enquanto. O contrato real e extenso e exige retornar distribuicoes.
-        return Ok(new { 
-            mensagem = "Compra programada executada com sucesso.", 
-            dataExecucao = executionDate 
-        });
+        var response = new ExecutePurchaseMotorResponse(
+            "Compra programada executada com sucesso.",
+            executionDate,
+            result.OrdensCompra,
+            result.Distribuicoes,
+            result.ResiduosCustMaster,
+            result.EventosIRPublicados
+        );
+
+        return Ok(response);
     }
 }
