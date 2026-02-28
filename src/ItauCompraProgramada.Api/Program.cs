@@ -1,8 +1,21 @@
 using ItauCompraProgramada.Infrastructure;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new JsonFormatter())
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
 // Add services to the container.
+builder.Services.AddControllers();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -21,7 +34,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.MapControllers();
+
 var summaries = new[]
+
 {
     "Freezing",
     "Bracing",
