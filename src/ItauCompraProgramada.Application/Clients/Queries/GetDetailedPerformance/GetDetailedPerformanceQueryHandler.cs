@@ -1,3 +1,4 @@
+using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
 using MediatR;
 
@@ -10,73 +11,16 @@ public class GetDetailedPerformanceQueryHandler(
 {
     public async Task<DetailedPerformanceDto> Handle(GetDetailedPerformanceQuery request, CancellationToken cancellationToken)
     {
-        var client = await clientRepository.GetByIdAsync(request.ClientId);
-        if (client == null)
-        {
-            throw new KeyNotFoundException($"Client with ID {request.ClientId} not found.");
-        }
+        var client = await GetClientOrThrowAsync(request.ClientId, cancellationToken);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var distributions = await distributionRepository.GetByClientIdAsync(request.ClientId);
-        
-        // 1. Aporte History
-        var aporteHistory = distributions
-            .GroupBy(d => d.DistributedAt.Date)
-            .Select(g => new AporteHistoryDto(
-                g.Key,
-                g.Sum(d => d.Quantity * d.UnitPrice),
-                "1/3" // Simplified as the motor currently does 1/3
-            ))
-            .OrderBy(h => h.Date)
-            .ToList();
 
-        // 2. Wallet Evolution
-        var walletEvolution = new List<WalletEvolutionDto>();
-        var runningCustody = new Dictionary<string, int>();
-        decimal runningInvestedValue = 0m;
+        var aporteHistory = MapToAporteHistory(distributions);
 
-        foreach (var dateGroup in distributions.GroupBy(d => d.DistributedAt.Date).OrderBy(g => g.Key))
-        {
-            var date = dateGroup.Key;
-            
-            foreach (var dist in dateGroup)
-            {
-                if (!runningCustody.ContainsKey(dist.Ticker))
-                    runningCustody[dist.Ticker] = 0;
-                
-                runningCustody[dist.Ticker] += dist.Quantity;
-                runningInvestedValue += dist.Quantity * dist.UnitPrice;
-            }
+        var walletEvolution = await ReconstructWalletEvolutionAsync(distributions, cancellationToken);
 
-            // Calculate market value at this date
-            var quotesAtDate = await stockQuoteRepository.GetLatestQuotesAsync(date);
-            decimal marketValueAtDate = 0m;
-
-            foreach (var item in runningCustody)
-            {
-                var quote = quotesAtDate.FirstOrDefault(q => q.Ticker == item.Key);
-                marketValueAtDate += item.Value * (quote?.ClosingPrice ?? 0m);
-            }
-
-            decimal rentability = runningInvestedValue > 0 
-                ? ((marketValueAtDate / runningInvestedValue) - 1) * 100 
-                : 0m;
-
-            walletEvolution.Add(new WalletEvolutionDto(
-                date,
-                marketValueAtDate,
-                runningInvestedValue,
-                rentability
-            ));
-        }
-
-        // Summary (Current state)
-        var latestEvolution = walletEvolution.LastOrDefault();
-        var summary = new PerformanceSummaryDto(
-            latestEvolution?.InvestedValue ?? 0m,
-            latestEvolution?.WalletValue ?? 0m,
-            (latestEvolution?.WalletValue ?? 0m) - (latestEvolution?.InvestedValue ?? 0m),
-            latestEvolution?.Rentability ?? 0m
-        );
+        var summary = CreatePerformanceSummary(walletEvolution);
 
         return new DetailedPerformanceDto(
             client.Id,
@@ -85,6 +29,98 @@ public class GetDetailedPerformanceQueryHandler(
             summary,
             aporteHistory,
             walletEvolution
+        );
+    }
+
+    private async Task<Client> GetClientOrThrowAsync(long clientId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var client = await clientRepository.GetByIdAsync(clientId);
+        if (client == null)
+        {
+            throw new KeyNotFoundException($"Client with ID {clientId} not found.");
+        }
+        return client;
+    }
+
+    private static List<AporteHistoryDto> MapToAporteHistory(List<Distribution> distributions)
+    {
+        return distributions
+            .GroupBy(d => d.DistributedAt.Date)
+            .Select(g => new AporteHistoryDto(
+                g.Key,
+                g.Sum(d => d.Quantity * d.UnitPrice),
+                "1/3"
+            ))
+            .OrderBy(h => h.Date)
+            .ToList();
+    }
+
+    private async Task<List<WalletEvolutionDto>> ReconstructWalletEvolutionAsync(List<Distribution> distributions, CancellationToken cancellationToken)
+    {
+        var walletEvolution = new List<WalletEvolutionDto>();
+        var runningCustody = new Dictionary<string, int>();
+        decimal runningInvestedValue = 0m;
+
+        foreach (var dateGroup in distributions.GroupBy(d => d.DistributedAt.Date).OrderBy(g => g.Key))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var date = dateGroup.Key;
+
+            foreach (var dist in dateGroup)
+            {
+                UpdateRunningCustody(runningCustody, dist);
+                runningInvestedValue += dist.Quantity * dist.UnitPrice;
+            }
+
+            var dailyValue = await CalculateMarketValueAtDateAsync(date, runningCustody, cancellationToken);
+
+            decimal rentability = runningInvestedValue > 0
+                ? ((dailyValue / runningInvestedValue) - 1) * 100
+                : 0m;
+
+            walletEvolution.Add(new WalletEvolutionDto(
+                date,
+                dailyValue,
+                runningInvestedValue,
+                rentability
+            ));
+        }
+
+        return walletEvolution;
+    }
+
+    private static void UpdateRunningCustody(Dictionary<string, int> custody, Distribution dist)
+    {
+        if (!custody.ContainsKey(dist.Ticker))
+            custody[dist.Ticker] = 0;
+
+        custody[dist.Ticker] += dist.Quantity;
+    }
+
+    private async Task<decimal> CalculateMarketValueAtDateAsync(DateTime date, Dictionary<string, int> runningCustody, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var quotesAtDate = await stockQuoteRepository.GetLatestQuotesAsync(date);
+        decimal marketValue = 0m;
+
+        foreach (var item in runningCustody)
+        {
+            var quote = quotesAtDate.FirstOrDefault(q => q.Ticker == item.Key);
+            marketValue += item.Value * (quote?.ClosingPrice ?? 0m);
+        }
+
+        return marketValue;
+    }
+
+    private static PerformanceSummaryDto CreatePerformanceSummary(List<WalletEvolutionDto> evolution)
+    {
+        var latest = evolution.LastOrDefault();
+        return new PerformanceSummaryDto(
+            latest?.InvestedValue ?? 0m,
+            latest?.WalletValue ?? 0m,
+            (latest?.WalletValue ?? 0m) - (latest?.InvestedValue ?? 0m),
+            latest?.Rentability ?? 0m
         );
     }
 }
