@@ -179,5 +179,6 @@ All development MUST align with the documents in the `requirements/` directory:
 - **Migrations:** When changing Domain Entities, generate a new EF Core migration in the Infrastructure project.
 - **Tests:** Every new feature in `Application` or `Domain` MUST have corresponding unit tests.
 - **Logging:** You MUST add detailed logs to all application flows (Handlers, Services, Background Tasks) to ensure full observability.
+- **Task Sequentiality & Approval:** Do not switch to a new task until the current one is either completed or explicitly pivoted/cancelled by the user. If a new request is made while another task is in progress, ask for explicit permission to switch or confirm if the current task should be finished first.
 - **Clean Code:** Adhere to SOLID principles and DRY. Prefer composition over inheritance.
 - **Safety:** Never commit secrets or connection strings; use `appsettings.json` with placeholders or environment variables.
