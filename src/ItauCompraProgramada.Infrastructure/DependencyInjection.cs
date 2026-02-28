@@ -1,6 +1,8 @@
+using ItauCompraProgramada.Application;
 using ItauCompraProgramada.Application.Interfaces;
 using ItauCompraProgramada.Application.Services;
 using ItauCompraProgramada.Domain.Interfaces;
+using ItauCompraProgramada.Domain.Repositories;
 using ItauCompraProgramada.Infrastructure.ExternalServices;
 using ItauCompraProgramada.Infrastructure.Persistence;
 using ItauCompraProgramada.Infrastructure.Persistence.Repositories;
@@ -21,7 +23,11 @@ public static class DependencyInjection
 
         services.AddSingleton<ICotahistParser, CotahistParser>();
         services.AddScoped<IStockQuoteRepository, StockQuoteRepository>();
+        services.AddScoped<IClientRepository, ClientRepository>();
+        services.AddScoped<IEventLogRepository, EventLogRepository>();
         services.AddScoped<IQuoteService, QuoteService>();
+
+        services.AddApplication();
 
         return services;
     }
