@@ -2,6 +2,7 @@ using ItauCompraProgramada.Api.Models;
 using ItauCompraProgramada.Application.Admin.Commands.CreateBasket;
 using ItauCompraProgramada.Application.Admin.Queries.GetBasketHistory;
 using ItauCompraProgramada.Application.Admin.Queries.GetCurrentBasket;
+using ItauCompraProgramada.Application.Admin.Queries.GetMasterCustody;
 
 using MediatR;
 
@@ -47,5 +48,20 @@ public class AdminController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new GetBasketHistoryQuery(), cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Returns the current stock holdings in the master account (AccountId = 1).
+    /// </summary>
+    [HttpGet("conta-master/custodia")]
+    public async Task<ActionResult<MasterCustodyResponse>> GetMasterCustody(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetMasterCustodyQuery(), cancellationToken);
+        
+        var response = new MasterCustodyResponse(
+            result.Custodias.Select(c => new MasterCustodyItemDto(c.Ticker, c.Quantidade, c.PrecoMedio)).ToList()
+        );
+
+        return Ok(response);
     }
 }
