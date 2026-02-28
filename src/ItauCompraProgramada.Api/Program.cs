@@ -1,3 +1,5 @@
+using ItauCompraProgramada.Api.Middleware;
+using ItauCompraProgramada.Application;
 using ItauCompraProgramada.Infrastructure;
 
 using Serilog;
@@ -25,6 +27,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
