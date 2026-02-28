@@ -4,9 +4,11 @@ using ItauCompraProgramada.Application.Services;
 using ItauCompraProgramada.Domain.Interfaces;
 using ItauCompraProgramada.Domain.Repositories;
 using ItauCompraProgramada.Infrastructure.ExternalServices;
+using ItauCompraProgramada.Infrastructure.Messaging;
 using ItauCompraProgramada.Infrastructure.Persistence;
 using ItauCompraProgramada.Infrastructure.Persistence.Repositories;
 using ItauCompraProgramada.Infrastructure.Services;
+
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -30,7 +32,10 @@ public static class DependencyInjection
         services.AddScoped<ICustodyRepository, CustodyRepository>();
         services.AddScoped<IRecommendationBasketRepository, RecommendationBasketRepository>();
         services.AddScoped<IEventLogRepository, EventLogRepository>();
+        services.AddScoped<IIREventRepository, IREventRepository>();
         services.AddScoped<IQuoteService, QuoteService>();
+        services.AddSingleton<IKafkaProducer, KafkaProducer>();
+
 
         services.AddHostedService<PurchaseScheduler>();
 

@@ -4,9 +4,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
+using ItauCompraProgramada.Application.Interfaces;
 using ItauCompraProgramada.Application.Purchases.Commands.ExecutePurchaseMotor;
+using ItauCompraProgramada.Application.Taxes.Services;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
+using ItauCompraProgramada.Domain.Repositories;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -20,6 +23,9 @@ public class ExecutePurchaseMotorCommandHandlerTests
     private readonly Mock<IPurchaseOrderRepository> _purchaseOrderRepositoryMock;
     private readonly Mock<ICustodyRepository> _custodyRepositoryMock;
     private readonly Mock<IRecommendationBasketRepository> _recommendationBasketRepositoryMock;
+    private readonly Mock<IIREventRepository> _irEventRepositoryMock;
+    private readonly TaxService _taxService;
+    private readonly Mock<IKafkaProducer> _kafkaProducerMock;
     private readonly Mock<ILogger<ExecutePurchaseMotorCommandHandler>> _loggerMock;
     private readonly ExecutePurchaseMotorCommandHandler _handler;
 
@@ -30,6 +36,9 @@ public class ExecutePurchaseMotorCommandHandlerTests
         _purchaseOrderRepositoryMock = new Mock<IPurchaseOrderRepository>();
         _custodyRepositoryMock = new Mock<ICustodyRepository>();
         _recommendationBasketRepositoryMock = new Mock<IRecommendationBasketRepository>();
+        _irEventRepositoryMock = new Mock<IIREventRepository>();
+        _taxService = new TaxService();
+        _kafkaProducerMock = new Mock<IKafkaProducer>();
         _loggerMock = new Mock<ILogger<ExecutePurchaseMotorCommandHandler>>();
 
         _handler = new ExecutePurchaseMotorCommandHandler(
@@ -38,6 +47,9 @@ public class ExecutePurchaseMotorCommandHandlerTests
             _purchaseOrderRepositoryMock.Object,
             _custodyRepositoryMock.Object,
             _recommendationBasketRepositoryMock.Object,
+            _irEventRepositoryMock.Object,
+            _taxService,
+            _kafkaProducerMock.Object,
             _loggerMock.Object);
     }
 
@@ -66,6 +78,10 @@ public class ExecutePurchaseMotorCommandHandlerTests
         _custodyRepositoryMock.Setup(r => r.GetByAccountIdAsync(client.GraphicAccount!.Id)).ReturnsAsync(new List<Custody>()); // Client Account
         
         _recommendationBasketRepositoryMock.Setup(r => r.GetActiveAsync()).ReturnsAsync((RecommendationBasket)null);
+        _irEventRepositoryMock.Setup(r => r.GetPendingPublicationAsync()).ReturnsAsync(new List<IREvent>());
+        _purchaseOrderRepositoryMock.Setup(r => r.GetTotalSalesValueInMonthAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
+        _irEventRepositoryMock.Setup(r => r.GetTotalBaseValueInMonthAsync(It.IsAny<long>(), It.IsAny<ItauCompraProgramada.Domain.Enums.IREventType>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
+        _irEventRepositoryMock.Setup(r => r.GetTotalIRValueInMonthAsync(It.IsAny<long>(), It.IsAny<ItauCompraProgramada.Domain.Enums.IREventType>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
 
         // Act
         await _handler.Handle(command, CancellationToken.None);
@@ -105,6 +121,11 @@ public class ExecutePurchaseMotorCommandHandlerTests
         // Need quote for WEGE3 to sell it
         var wegeQuote = new StockQuote(executionDate.AddDays(-1), "WEGE3", 50m, 55m, 56m, 49m);
         _stockQuoteRepositoryMock.Setup(r => r.GetLatestByTickerAsync("WEGE3")).ReturnsAsync(wegeQuote);
+
+        _irEventRepositoryMock.Setup(r => r.GetPendingPublicationAsync()).ReturnsAsync(new List<IREvent>());
+        _purchaseOrderRepositoryMock.Setup(r => r.GetTotalSalesValueInMonthAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
+        _irEventRepositoryMock.Setup(r => r.GetTotalBaseValueInMonthAsync(It.IsAny<long>(), It.IsAny<ItauCompraProgramada.Domain.Enums.IREventType>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
+        _irEventRepositoryMock.Setup(r => r.GetTotalIRValueInMonthAsync(It.IsAny<long>(), It.IsAny<ItauCompraProgramada.Domain.Enums.IREventType>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(0m);
 
         // Act
         await _handler.Handle(command, CancellationToken.None);

@@ -1,6 +1,9 @@
+using ItauCompraProgramada.Application.Interfaces;
+using ItauCompraProgramada.Application.Taxes.Services;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Enums;
 using ItauCompraProgramada.Domain.Interfaces;
+using ItauCompraProgramada.Domain.Repositories;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -13,6 +16,9 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
     private readonly IPurchaseOrderRepository _purchaseOrderRepository;
     private readonly ICustodyRepository _custodyRepository;
     private readonly IRecommendationBasketRepository _recommendationBasketRepository;
+    private readonly IIREventRepository _irEventRepository;
+    private readonly TaxService _taxService;
+    private readonly IKafkaProducer _kafkaProducer;
     private readonly ILogger<ExecutePurchaseMotorCommandHandler> _logger;
 
     public ExecutePurchaseMotorCommandHandler(
@@ -21,6 +27,9 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         IPurchaseOrderRepository purchaseOrderRepository,
         ICustodyRepository custodyRepository,
         IRecommendationBasketRepository recommendationBasketRepository,
+        IIREventRepository irEventRepository,
+        TaxService taxService,
+        IKafkaProducer kafkaProducer,
         ILogger<ExecutePurchaseMotorCommandHandler> logger)
     {
         _clientRepository = clientRepository;
@@ -28,6 +37,9 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         _purchaseOrderRepository = purchaseOrderRepository;
         _custodyRepository = custodyRepository;
         _recommendationBasketRepository = recommendationBasketRepository;
+        _irEventRepository = irEventRepository;
+        _taxService = taxService;
+        _kafkaProducer = kafkaProducer;
         _logger = logger;
     }
 
@@ -146,7 +158,16 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
                 }
 
                 // Deduct from client's graphic account balance (which was initial aporte)
-                client.GraphicAccount.SubtractBalance(clientQuantity * quote.ClosingPrice);
+                var operationValue = clientQuantity * quote.ClosingPrice;
+                client.GraphicAccount.SubtractBalance(operationValue);
+
+                // RN-053: IR Dedo-duro on Purchase Distribution
+                var irDedoDuro = _taxService.CalculateIrDedoDuro(operationValue);
+                if (irDedoDuro > 0)
+                {
+                    await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, operationValue, irDedoDuro));
+                    _logger.LogInformation("IR Dedo-duro of {Value} calculated for client {ClientId} on {Ticker} purchase.", irDedoDuro, client.Id, quote.Ticker);
+                }
             }
 
             // 7. Update Master Custody with Residue
@@ -173,18 +194,62 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
             var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount.Id);
             var toSell = clientCustodies.Where(c => !currentTop5Tickers.Contains(c.Ticker) && c.Quantity > 0).ToList();
 
+            decimal currentExecutionSales = 0m;
+            decimal currentExecutionProfit = 0m;
+
             foreach (var custody in toSell)
             {
                 var currentQuote = await _stockQuoteRepository.GetLatestByTickerAsync(custody.Ticker);
                 if (currentQuote == null) continue;
 
-                var proceeds = custody.Quantity * currentQuote.ClosingPrice;
+                var proceeds = (decimal)custody.Quantity * currentQuote.ClosingPrice;
+                var profit = (currentQuote.ClosingPrice - custody.AveragePrice) * custody.Quantity;
+                
+                currentExecutionSales += proceeds;
+                currentExecutionProfit += profit;
+
                 client.GraphicAccount.AddBalance(proceeds);
 
                 await _purchaseOrderRepository.AddAsync(new PurchaseOrder(client.GraphicAccount.Id, custody.Ticker, -custody.Quantity, currentQuote.ClosingPrice, MarketType.Standard));
+
+                // RN-053: IR Dedo-duro on Sales
+                var irDedoDuro = _taxService.CalculateIrDedoDuro(proceeds);
+                if (irDedoDuro > 0)
+                {
+                    await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, proceeds, irDedoDuro));
+                    _logger.LogInformation("IR Dedo-duro of {Value} calculated for client {ClientId} on {Ticker} sale.", irDedoDuro, client.Id, custody.Ticker);
+                }
+
+                // RN-057 - RN-062: IR Profit Tax tracking (storing profit in BaseValue)
+                await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, profit, 0m));
+
                 custody.SubtractQuantity(custody.Quantity);
                 
-                _logger.LogInformation("Sold {Quantity} of {Ticker} for client {ClientId}. Proceeds: {Proceeds}.", custody.Quantity, custody.Ticker, client.Id, proceeds);
+                _logger.LogInformation("Sold {Quantity} of {Ticker} for client {ClientId}. Proceeds: {Proceeds}. Profit: {Profit}.", custody.Quantity, custody.Ticker, client.Id, proceeds, profit);
+            }
+
+            // Calculate Monthly Profit Tax (if total sales > 20k)
+            var totalPreviousSalesInMonth = await _purchaseOrderRepository.GetTotalSalesValueInMonthAsync(client.GraphicAccount.Id, request.ExecutionDate.Year, request.ExecutionDate.Month);
+            var totalSalesInMonth = totalPreviousSalesInMonth + currentExecutionSales;
+
+            if (totalSalesInMonth > 20000m)
+            {
+                var totalPreviousProfitInMonth = await _irEventRepository.GetTotalBaseValueInMonthAsync(client.Id, IREventType.SalesProfit, request.ExecutionDate.Year, request.ExecutionDate.Month);
+                var totalProfitInMonth = totalPreviousProfitInMonth + currentExecutionProfit;
+
+                var totalTaxRequired = _taxService.CalculateProfitTax(totalSalesInMonth, totalProfitInMonth);
+                
+                if (totalTaxRequired > 0)
+                {
+                    var totalTaxAlreadyPaid = await _irEventRepository.GetTotalIRValueInMonthAsync(client.Id, IREventType.SalesProfit, request.ExecutionDate.Year, request.ExecutionDate.Month);
+                    var taxToPayNow = totalTaxRequired - totalTaxAlreadyPaid;
+
+                    if (taxToPayNow > 0)
+                    {
+                        await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, 0m, taxToPayNow));
+                        _logger.LogInformation("IR Profit Tax of {Value} calculated for client {ClientId} (Total sales in month: {SalesValue}).", taxToPayNow, client.Id, totalSalesInMonth);
+                    }
+                }
             }
         }
 
@@ -194,8 +259,37 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         await _clientRepository.SaveChangesAsync();
         await _recommendationBasketRepository.SaveChangesAsync();
         await _custodyRepository.SaveChangesAsync();
+        await _irEventRepository.SaveChangesAsync();
+
+        // US06: Kafka Integration (Publish IR events)
+        _logger.LogInformation("Publishing IR events to Kafka.");
+        var pendingEvents = await _irEventRepository.GetPendingPublicationAsync();
+        foreach (var irEvent in pendingEvents)
+        {
+            var topic = irEvent.Type == IREventType.DedoDuro ? "ir-dedo-duro" : "ir-profit-tax";
+            
+            // Map to anonymous object for better JSON format
+            var message = new
+            {
+                irEvent.Id,
+                irEvent.ClienteId,
+                irEvent.Type,
+                irEvent.BaseValue,
+                irEvent.IRValue,
+                irEvent.EventDate,
+                Topic = topic
+            };
+
+            await _kafkaProducer.PublishAsync(topic, message);
+            irEvent.MarkAsPublished();
+        }
+
+        if (pendingEvents.Any())
+        {
+            await _irEventRepository.SaveChangesAsync();
+            _logger.LogInformation("{Count} IR events published and marked as successfully.", pendingEvents.Count);
+        }
         
         _logger.LogInformation("ExecutePurchaseMotorCommand completed successfully.");
     }
 }
-
