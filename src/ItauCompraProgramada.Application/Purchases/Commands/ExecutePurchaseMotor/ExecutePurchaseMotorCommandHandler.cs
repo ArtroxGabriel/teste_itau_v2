@@ -58,7 +58,7 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         decimal totalContribution = clients.Sum(c => c.MonthlyContribution / 3);
         await ExecuteConsolidatedPurchaseAndDistributionAsync(clients, basket, basketQuotes, totalContribution);
 
-        await ProcessRebalancingSalesAsync(clients, basket, request.ExecutionDate);
+        await ProcessRebalancingSalesAsync(clients, basket, basketQuotes, request.ExecutionDate);
 
         await SaveChangesAsync();
         await PublishTaxEventsAsync();
@@ -234,7 +234,11 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         }
     }
 
-    private async Task ProcessRebalancingSalesAsync(List<Client> clients, RecommendationBasket basket, DateTime executionDate)
+    private async Task ProcessRebalancingSalesAsync(
+        List<Client> clients,
+        RecommendationBasket basket,
+        Dictionary<string, StockQuote> basketQuotes,
+        DateTime executionDate)
     {
         _logger.LogInformation("Starting portfolio rebalancing for clients.");
         var basketTickers = basket.Items.Select(i => i.Ticker).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -271,8 +275,152 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
                 custody.SubtractQuantity(custody.Quantity);
             }
 
+            // RN-049: rebalance stayed tickers (sell excess / buy deficit based on current basket %)
+            var (rebalanceSales, rebalanceProfit) = await ProcessStayedTickerRebalancingAsync(
+                client, basket, basketQuotes, clientCustodies);
+            executionSales += rebalanceSales;
+            executionProfit += rebalanceProfit;
+
             await CalculateMonthlyProfitTaxAsync(client, executionSales, executionProfit, executionDate);
         }
+    }
+
+    /// <summary>
+    /// RN-049 — For tickers that remain in the basket but may have changed percentage,
+    /// compare the client's current custody quantity against the target derived from
+    /// total portfolio value × basket percentage / price. Sell excess or buy deficit.
+    /// Returns (totalSalesValue, totalProfit) from all stayed-ticker operations.
+    /// </summary>
+    private async Task<(decimal sales, decimal profit)> ProcessStayedTickerRebalancingAsync(
+        Client client,
+        RecommendationBasket basket,
+        Dictionary<string, StockQuote> basketQuotes,
+        List<Custody> clientCustodies)
+    {
+        // Step 1: compute total portfolio value using only basket tickers with available quotes
+        decimal totalPortfolioValue = 0m;
+        foreach (var item in basket.Items)
+        {
+            if (!basketQuotes.TryGetValue(item.Ticker, out var quote)) continue;
+            var custody = clientCustodies.FirstOrDefault(c =>
+                string.Equals(c.Ticker, item.Ticker, StringComparison.OrdinalIgnoreCase));
+            if (custody != null && custody.Quantity > 0)
+                totalPortfolioValue += custody.Quantity * quote.ClosingPrice;
+        }
+
+        if (totalPortfolioValue <= 0m)
+        {
+            _logger.LogDebug(
+                "Client {ClientId}: portfolio value is zero — skipping stayed-ticker rebalancing.",
+                client.Id);
+            return (0m, 0m);
+        }
+
+        decimal rebalanceSales = 0m;
+        decimal rebalanceProfit = 0m;
+
+        // Step 2: for each basket ticker compute target and delta
+        foreach (var item in basket.Items)
+        {
+            if (!basketQuotes.TryGetValue(item.Ticker, out var quote)) continue;
+
+            var custody = clientCustodies.FirstOrDefault(c =>
+                string.Equals(c.Ticker, item.Ticker, StringComparison.OrdinalIgnoreCase));
+
+            int currentQuantity = custody?.Quantity ?? 0;
+            int targetQuantity = (int)(totalPortfolioValue * (item.Percentage / 100m) / quote.ClosingPrice);
+            int delta = targetQuantity - currentQuantity;
+
+            if (delta == 0) continue;
+
+            if (delta < 0)
+            {
+                // Sell excess (delta is negative → abs value = shares to sell)
+                int toSellQty = -delta;
+                var (proceeds, profit) = await SellStayedTickerExcessAsync(client, custody!, quote, toSellQty);
+                rebalanceSales += proceeds;
+                rebalanceProfit += profit;
+            }
+            else
+            {
+                // Buy deficit
+                await BuyStayedTickerDeficitAsync(client, custody, quote, item.Ticker, delta, clientCustodies);
+            }
+        }
+
+        return (rebalanceSales, rebalanceProfit);
+    }
+
+    private async Task<(decimal proceeds, decimal profit)> SellStayedTickerExcessAsync(
+        Client client,
+        Custody custody,
+        StockQuote quote,
+        int quantity)
+    {
+        var proceeds = quantity * quote.ClosingPrice;
+        var profit = (quote.ClosingPrice - custody.AveragePrice) * quantity;
+
+        client.GraphicAccount!.AddBalance(proceeds);
+        custody.SubtractQuantity(quantity);
+
+        await _purchaseOrderRepository.AddAsync(
+            new PurchaseOrder(client.GraphicAccount.Id, quote.Ticker, -quantity, quote.ClosingPrice, MarketType.Standard));
+
+        var irDedoDuro = _taxService.CalculateIrDedoDuro(proceeds);
+        if (irDedoDuro > 0)
+            await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, proceeds, irDedoDuro));
+
+        await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.SalesProfit, profit, 0m));
+
+        _logger.LogInformation(
+            "Client {ClientId}: RN-049 sell {Quantity} {Ticker} @ {Price} (proceeds {Proceeds:C}).",
+            client.Id, quantity, quote.Ticker, quote.ClosingPrice, proceeds);
+
+        return (proceeds, profit);
+    }
+
+    private async Task BuyStayedTickerDeficitAsync(
+        Client client,
+        Custody? custody,
+        StockQuote quote,
+        string ticker,
+        int quantity,
+        List<Custody> clientCustodies)
+    {
+        var cost = quantity * quote.ClosingPrice;
+
+        // Only buy if client has sufficient balance
+        if (client.GraphicAccount!.Balance < cost)
+        {
+            _logger.LogWarning(
+                "Client {ClientId}: insufficient balance ({Balance:C}) to buy {Quantity} {Ticker} @ {Price:C} (cost {Cost:C}). Skipping RN-049 deficit buy.",
+                client.Id, client.GraphicAccount.Balance, quantity, ticker, quote.ClosingPrice, cost);
+            return;
+        }
+
+        client.GraphicAccount.SubtractBalance(cost);
+
+        if (custody != null)
+        {
+            custody.UpdateAveragePrice(quantity, quote.ClosingPrice);
+        }
+        else
+        {
+            var newCustody = new Custody(client.GraphicAccount.Id, ticker, quantity, quote.ClosingPrice);
+            await _custodyRepository.AddAsync(newCustody);
+            clientCustodies.Add(newCustody);
+        }
+
+        await _purchaseOrderRepository.AddAsync(
+            new PurchaseOrder(client.GraphicAccount.Id, ticker, quantity, quote.ClosingPrice, MarketType.Standard));
+
+        var irDedoDuro = _taxService.CalculateIrDedoDuro(cost);
+        if (irDedoDuro > 0)
+            await _irEventRepository.AddAsync(new IREvent(client.Id, IREventType.DedoDuro, cost, irDedoDuro));
+
+        _logger.LogInformation(
+            "Client {ClientId}: RN-049 buy {Quantity} {Ticker} @ {Price} (cost {Cost:C}).",
+            client.Id, quantity, ticker, quote.ClosingPrice, cost);
     }
 
     private async Task CalculateMonthlyProfitTaxAsync(Client client, decimal currentSales, decimal currentProfit, DateTime date)
