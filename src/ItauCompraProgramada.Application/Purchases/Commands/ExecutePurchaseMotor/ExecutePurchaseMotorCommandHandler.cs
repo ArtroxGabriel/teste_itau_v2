@@ -52,12 +52,13 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         var clients = await GetScheduledClientsAsync(request.ExecutionDate.Day);
         if (!clients.Any()) return;
 
-        var top5Quotes = await DetermineAndRefreshTop5BasketAsync(request.ExecutionDate);
+        var basket = await LoadActiveBasketAsync(cancellationToken);
+        var basketQuotes = await LoadBasketQuotesAsync(basket, request.ExecutionDate);
 
         decimal totalContribution = clients.Sum(c => c.MonthlyContribution / 3);
-        await ExecuteConsolidatedPurchaseAndDistributionAsync(clients, top5Quotes, totalContribution);
+        await ExecuteConsolidatedPurchaseAndDistributionAsync(clients, basket, basketQuotes, totalContribution);
 
-        await ProcessRebalancingSalesAsync(clients, top5Quotes, request.ExecutionDate);
+        await ProcessRebalancingSalesAsync(clients, basket, request.ExecutionDate);
 
         await SaveChangesAsync();
         await PublishTaxEventsAsync();
@@ -79,45 +80,66 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         return clients;
     }
 
-    private async Task<List<StockQuote>> DetermineAndRefreshTop5BasketAsync(DateTime date)
+    /// <summary>
+    /// Loads the admin-managed active basket (US02).
+    /// Throws if no basket has been configured yet.
+    /// </summary>
+    private async Task<RecommendationBasket> LoadActiveBasketAsync(CancellationToken cancellationToken)
     {
-        var quotes = await _stockQuoteRepository.GetLatestQuotesAsync(date);
-        var top5Quotes = quotes
-            .Select(q => new
-            {
-                Quote = q,
-                Performance = q.OpeningPrice > 0 ? (q.ClosingPrice - q.OpeningPrice) / q.OpeningPrice : 0
-            })
-            .OrderByDescending(x => x.Performance)
-            .Take(5)
-            .Select(x => x.Quote)
-            .ToList();
-
-        if (top5Quotes.Count < 5)
+        var basket = await _recommendationBasketRepository.GetActiveAsync(cancellationToken);
+        if (basket is null)
         {
-            _logger.LogError("Only {Count} quotes found. Need 5 to determine Top 5.", top5Quotes.Count);
-            throw new InvalidOperationException("Not enough quotes to determine Top 5.");
+            _logger.LogError("No active recommendation basket found. Purchase motor cannot run.");
+            throw new InvalidOperationException(
+                "Nenhuma cesta de recomendação ativa encontrada. Configure a cesta via POST /api/admin/cesta antes de executar o motor.");
         }
 
-        _logger.LogInformation("Top 5 stocks identified: {Tickers}", string.Join(", ", top5Quotes.Select(q => q.Ticker)));
+        _logger.LogInformation(
+            "Active basket loaded. Id: {Id}, Name: {Name}, Items: {Tickers}",
+            basket.Id, basket.Name, string.Join(", ", basket.Items.Select(i => i.Ticker)));
 
-        var basketItems = top5Quotes.Select(q => new BasketItem(q.Ticker, 20m)).ToList();
-        var newBasket = new RecommendationBasket($"Top 5 - {date:yyyy-MM-dd}", basketItems);
-        var previousBasket = await _recommendationBasketRepository.GetActiveAsync();
-        previousBasket?.Deactivate();
-        await _recommendationBasketRepository.AddAsync(newBasket);
-
-        return top5Quotes;
+        return basket;
     }
 
-    private async Task ExecuteConsolidatedPurchaseAndDistributionAsync(List<Client> clients, List<StockQuote> top5Quotes, decimal totalContribution)
+    /// <summary>
+    /// Fetches the latest stock quotes for all tickers in the basket.
+    /// </summary>
+    private async Task<Dictionary<string, StockQuote>> LoadBasketQuotesAsync(RecommendationBasket basket, DateTime date)
     {
-        decimal contributionPerStock = totalContribution / 5;
+        var quotes = await _stockQuoteRepository.GetLatestQuotesAsync(date);
+        var quoteByTicker = quotes.ToDictionary(q => q.Ticker, q => q, StringComparer.OrdinalIgnoreCase);
+
+        var result = new Dictionary<string, StockQuote>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in basket.Items)
+        {
+            if (quoteByTicker.TryGetValue(item.Ticker, out var quote))
+            {
+                result[item.Ticker] = quote;
+            }
+            else
+            {
+                _logger.LogWarning("No quote found for basket ticker {Ticker} on {Date}. Skipping.", item.Ticker, date);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task ExecuteConsolidatedPurchaseAndDistributionAsync(
+        List<Client> clients,
+        RecommendationBasket basket,
+        Dictionary<string, StockQuote> basketQuotes,
+        decimal totalContribution)
+    {
         var masterAccountCustodies = await _custodyRepository.GetByAccountIdAsync(1);
 
-        foreach (var quote in top5Quotes)
+        foreach (var item in basket.Items)
         {
-            int totalQuantityNeeded = (int)(contributionPerStock / quote.ClosingPrice);
+            if (!basketQuotes.TryGetValue(item.Ticker, out var quote)) continue;
+
+            // Use basket percentage for allocation (RN-015 guarantees sum = 100%)
+            decimal allocationForTicker = totalContribution * (item.Percentage / 100m);
+            int totalQuantityNeeded = (int)(allocationForTicker / quote.ClosingPrice);
             if (totalQuantityNeeded <= 0) continue;
 
             var masterCustody = masterAccountCustodies.FirstOrDefault(c => c.Ticker == quote.Ticker);
@@ -130,7 +152,7 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
             }
 
             int totalAvailable = masterBalance + quantityToBuy;
-            int distributedCount = await DistributeStockToClientsAsync(clients, quote, totalAvailable, totalContribution);
+            int distributedCount = await DistributeStockToClientsAsync(clients, quote, item.Percentage, totalAvailable, totalContribution);
 
             await UpdateMasterResidueAsync(masterCustody, quote, totalAvailable - distributedCount, masterBalance);
         }
@@ -151,15 +173,26 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
             quote.Ticker, quantityToBuy, standardQuantity, fractionalQuantity);
     }
 
-    private async Task<int> DistributeStockToClientsAsync(List<Client> clients, StockQuote quote, int totalAvailable, decimal totalContribution)
+    private async Task<int> DistributeStockToClientsAsync(
+        List<Client> clients,
+        StockQuote quote,
+        decimal basketPercentage,
+        int totalAvailable,
+        decimal totalContribution)
     {
         int distributedCount = 0;
         foreach (var client in clients)
         {
             if (client.GraphicAccount == null) continue;
 
-            decimal proportion = (client.MonthlyContribution / 3) / totalContribution;
-            int clientQuantity = (int)(totalAvailable * proportion);
+            // Each client gets their proportional share of the basket-weighted allocation
+            decimal clientContribution = client.MonthlyContribution / 3;
+            decimal clientAllocation = clientContribution * (basketPercentage / 100m);
+            int clientQuantity = quote.ClosingPrice > 0 ? (int)(clientAllocation / quote.ClosingPrice) : 0;
+            if (clientQuantity <= 0) continue;
+
+            // Ensure we do not distribute more than available
+            clientQuantity = Math.Min(clientQuantity, totalAvailable - distributedCount);
             if (clientQuantity <= 0) continue;
 
             distributedCount += clientQuantity;
@@ -201,17 +234,17 @@ public class ExecutePurchaseMotorCommandHandler : IRequestHandler<ExecutePurchas
         }
     }
 
-    private async Task ProcessRebalancingSalesAsync(List<Client> clients, List<StockQuote> top5Quotes, DateTime executionDate)
+    private async Task ProcessRebalancingSalesAsync(List<Client> clients, RecommendationBasket basket, DateTime executionDate)
     {
         _logger.LogInformation("Starting portfolio rebalancing for clients.");
-        var top5Tickers = top5Quotes.Select(q => q.Ticker).ToList();
+        var basketTickers = basket.Items.Select(i => i.Ticker).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var client in clients)
         {
             if (client.GraphicAccount == null) continue;
 
             var clientCustodies = await _custodyRepository.GetByAccountIdAsync(client.GraphicAccount.Id);
-            var toSell = clientCustodies.Where(c => !top5Tickers.Contains(c.Ticker) && c.Quantity > 0).ToList();
+            var toSell = clientCustodies.Where(c => !basketTickers.Contains(c.Ticker) && c.Quantity > 0).ToList();
 
             decimal executionSales = 0m;
             decimal executionProfit = 0m;

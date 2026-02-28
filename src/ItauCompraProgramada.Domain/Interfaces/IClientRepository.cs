@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 using ItauCompraProgramada.Domain.Entities;
@@ -8,6 +9,7 @@ public interface IClientRepository
 {
     Task<List<Client>> GetClientsForExecutionAsync(int executionDay);
     Task<Client?> GetByIdAsync(long id);
+    Task<int> GetActiveCountAsync(CancellationToken cancellationToken = default);
     Task AddAsync(Client client);
     Task SaveChangesAsync();
 }

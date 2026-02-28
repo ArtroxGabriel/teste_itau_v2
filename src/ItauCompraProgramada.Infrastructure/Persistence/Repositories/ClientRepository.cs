@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 using ItauCompraProgramada.Domain.Entities;
@@ -21,8 +22,13 @@ public class ClientRepository(ItauDbContext dbContext) : IClientRepository
     {
         return await dbContext.Clients
             .Include(c => c.GraphicAccount)
-                .ThenInclude(ga => ga.Custodies)
+                .ThenInclude(ga => ga!.Custodies)
             .FirstOrDefaultAsync(c => c.Id == id);
+    }
+
+    public async Task<int> GetActiveCountAsync(CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Clients.CountAsync(c => c.IsActive, cancellationToken);
     }
 
     public async Task AddAsync(Client client)
