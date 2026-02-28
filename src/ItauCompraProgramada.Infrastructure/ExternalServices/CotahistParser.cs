@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+
 using ItauCompraProgramada.Application.Interfaces;
 using ItauCompraProgramada.Domain.Entities;
 
@@ -28,7 +29,7 @@ public class CotahistParser : ICotahistParser
 
             var ticker = line.Substring(12, 12).Trim();
             var tradingDate = DateTime.ParseExact(line.Substring(2, 8), "yyyyMMdd", CultureInfo.InvariantCulture);
-            
+
             var openingPrice = ParsePrice(line.Substring(56, 13));
             var maxPrice = ParsePrice(line.Substring(69, 13));
             var minPrice = ParsePrice(line.Substring(82, 13));

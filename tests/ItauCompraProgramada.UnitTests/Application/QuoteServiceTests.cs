@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+
 using ItauCompraProgramada.Application.Interfaces;
 using ItauCompraProgramada.Application.Services;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
+
 using Moq;
+
 using Xunit;
 
 namespace ItauCompraProgramada.UnitTests.Application;

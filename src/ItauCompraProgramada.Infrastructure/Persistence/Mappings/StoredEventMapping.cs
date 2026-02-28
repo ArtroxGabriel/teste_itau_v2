@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Domain.Entities;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -31,7 +32,7 @@ public class StoredEventMapping : IEntityTypeConfiguration<StoredEvent>
 
         builder.Property(e => e.Status)
             .HasMaxLength(50);
-            
+
         builder.Property(e => e.Timestamp)
             .IsRequired();
     }

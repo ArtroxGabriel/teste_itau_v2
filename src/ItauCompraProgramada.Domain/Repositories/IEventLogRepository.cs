@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+
 using ItauCompraProgramada.Domain.Entities;
 
 namespace ItauCompraProgramada.Domain.Repositories;

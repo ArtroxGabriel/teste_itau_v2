@@ -1,4 +1,5 @@
 using System;
+
 using ItauCompraProgramada.Domain.Enums;
 
 namespace ItauCompraProgramada.Domain.Entities;

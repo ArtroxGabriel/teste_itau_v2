@@ -1,8 +1,11 @@
 using FluentAssertions;
+
 using ItauCompraProgramada.Application.Clients.Commands.CreateClient;
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Interfaces;
+
 using Moq;
+
 using Xunit;
 
 namespace ItauCompraProgramada.UnitTests.Application.Clients.Commands;

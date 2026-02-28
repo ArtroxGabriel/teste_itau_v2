@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Application.Common.Interfaces;
+
 using MediatR;
 
 namespace ItauCompraProgramada.Application.Clients.Commands.CreateClient;

@@ -83,6 +83,12 @@ namespace ItauCompraProgramada.Infrastructure.Migrations
                         .HasColumnType("varchar(200)")
                         .HasColumnName("Nome");
 
+                    b.Property<int>("NextPurchaseDay")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(5)
+                        .HasColumnName("DiaExecucao");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Cpf")
@@ -175,6 +181,13 @@ namespace ItauCompraProgramada.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasColumnName("NumeroConta");
+
+                    b.Property<decimal>("Balance")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("Saldo");
 
                     b.Property<long>("ClienteId")
                         .HasColumnType("bigint");

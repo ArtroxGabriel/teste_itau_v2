@@ -1,8 +1,10 @@
 using System.Text.Json;
-using MediatR;
-using ItauCompraProgramada.Domain.Repositories;
+
 using ItauCompraProgramada.Application.Common.Interfaces;
 using ItauCompraProgramada.Domain.Entities;
+using ItauCompraProgramada.Domain.Repositories;
+
+using MediatR;
 
 namespace ItauCompraProgramada.Application.Behaviors;
 

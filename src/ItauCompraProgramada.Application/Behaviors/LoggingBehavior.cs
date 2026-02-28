@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
+
 using MediatR;
+
 using Microsoft.Extensions.Logging;
 
 namespace ItauCompraProgramada.Application.Behaviors;

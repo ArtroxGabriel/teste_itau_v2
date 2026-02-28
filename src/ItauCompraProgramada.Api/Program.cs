@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Infrastructure;
+
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;

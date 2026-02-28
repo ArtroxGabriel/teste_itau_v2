@@ -1,7 +1,11 @@
 using System.Reflection;
+
 using FluentValidation;
+
 using ItauCompraProgramada.Application.Behaviors;
+
 using MediatR;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ItauCompraProgramada.Application;

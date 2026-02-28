@@ -2,10 +2,10 @@
 
 ## User Stories (Backlog)
 
-- [ ] **US01: Product Adhesion & Management**: Join/leave the "Top Five" product and manage monthly contribution.
+- [x] **US01: Product Adhesion & Management**: Join/leave the "Top Five" product and manage monthly contribution.
 - [ ] **US02: Admin Recommendation Basket**: Manage "Top Five" basket (exactly 5 stocks, 100% total).
-- [ ] **US03: Automated Purchase Motor**: Execute consolidated purchases on days 5, 15, and 25.
-- [ ] **US04: Portfolio Rebalancing**: Rebalance client portfolios when basket changes or proportions drift.
+- [x] **US03: Automated Purchase Motor**: Execute consolidated purchases on days 5, 15, and 25.
+- [x] **US04: Portfolio Rebalancing**: Rebalance client portfolios when basket changes or proportions drift.
 - [x] **US05: B3 Data Integration**: Parse `COTAHIST` files to get closing prices.
 - [ ] **US06: Tax Reporting (Kafka)**: Calculate IR Dedo-duro and Profit Tax and publish to Kafka.
 - [ ] **US07: Client Dashboard**: View portfolio, average prices, and detailed profitability (P/L).
@@ -15,8 +15,8 @@
 - [x] Domain Entities Implementation
 - [x] Infrastructure Setup (MySQL + EF Core)
 - [x] B3 COTAHIST Parser
-- [ ] Product Adhesion (Next)
-- [ ] Purchase Engine
-- [ ] Rebalancing Logic
-- [ ] Kafka Integration
+- [x] Product Adhesion (US01)
+- [x] Purchase Engine (US03)
+- [x] Rebalancing Logic (US04)
+- [ ] Kafka Integration (Next)
 - [ ] API Development

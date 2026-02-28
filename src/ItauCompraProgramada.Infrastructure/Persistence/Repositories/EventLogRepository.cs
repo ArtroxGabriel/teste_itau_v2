@@ -1,6 +1,8 @@
 using System.Threading.Tasks;
+
 using ItauCompraProgramada.Domain.Entities;
 using ItauCompraProgramada.Domain.Repositories;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace ItauCompraProgramada.Infrastructure.Persistence.Repositories;

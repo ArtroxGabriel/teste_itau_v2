@@ -1,4 +1,5 @@
 using ItauCompraProgramada.Domain.Entities;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace ItauCompraProgramada.Infrastructure.Persistence;

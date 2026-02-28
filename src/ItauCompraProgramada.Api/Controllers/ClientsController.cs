@@ -1,5 +1,7 @@
 using ItauCompraProgramada.Application.Clients.Commands.CreateClient;
+
 using MediatR;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace ItauCompraProgramada.Api.Controllers;
