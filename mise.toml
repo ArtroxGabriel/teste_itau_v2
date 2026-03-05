@@ -23,6 +23,40 @@ sources = ['src/**/*.cs']
 
 [tasks.start]
 depends = ['restore', 'build']
-run = "dotnet run --project src/ItauCompraProgramada.Api --no-build | jq"
+run = "dotnet run --project src/ItauCompraProgramada.Api --urls 'http://localhost:5000' --no-build | jq"
 description = "Run the application without build"
 alias = "s"
+
+[tasks.'test:unit']
+depends = ['restore', 'build']
+run = "dotnet test --no-build"
+description = "Run unit tests"
+alias = "t:unit"
+
+[tasks.'tool:restore']
+run = "dotnet tool restore"
+description = "Restore dotnet local tools (e.g. dotnet-ef)"
+alias = "tr"
+
+[tasks.format]
+run = "dotnet format"
+description = "Check code formatting"
+alias = "fmt"
+sources = ['src/**/*.cs']
+dir = "{{ config_root }}"
+
+[tasks.'infra:migrate']
+depends = ['build', 'tool:restore']
+run = "dotnet ef database update --project src/ItauCompraProgramada.Infrastructure --startup-project src/ItauCompraProgramada.Api"
+description = "Apply EF Core migrations to the database"
+alias = "im"
+
+[tasks.'infra:up']
+description = "up infrastructure with docker compose"
+run = "docker compose up -d"
+alias = "iu"
+
+[tasks."infra:down"]
+description = "down infrastructure with docker compose"
+run = "docker compose down"
+alias = "id"
