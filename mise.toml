@@ -1,2 +1,28 @@
 [tools]
 dotnet = "8.0"
+
+[tasks.restore]
+run = "dotnet restore"
+description = "Restore dependencies specified from .NET project"
+alias = "r"
+sources = [
+    "**/*.csproj",
+    "**/*.props",
+    "**/*.targets",
+    ".config/dotnet-tools.json",
+    "NuGet.config",
+]
+
+
+[tasks.build]
+depends = ['restore']
+run = "dotnet build"
+description = "Builds the project"
+alias = "b"
+sources = ['src/**/*.cs']
+
+[tasks.start]
+depends = ['restore', 'build']
+run = "dotnet run --project src/ItauCompraProgramada.Api --no-build | jq"
+description = "Run the application without build"
+alias = "s"
