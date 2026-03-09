@@ -6,11 +6,12 @@
     - [x] Client Adhesion (Join)
     - [x] Client Exit (Leave)
     - [x] Update Monthly Contribution
-- [ ] **US02: Admin Recommendation Basket**: Manage "Top Five" basket (exactly 5 stocks, 100% total).
+- [x] **US02: Admin Recommendation Basket**: Manage "Top Five" basket (exactly 5 stocks, 100% total).
 - [x] **US03: Automated Purchase Motor**: Execute consolidated purchases on days 5, 15, and 25.
 - [/] **US04: Portfolio Rebalancing**: Rebalance client portfolios when basket changes or proportions drift.
-    - [x] Rebalance on Basket Change
-    - [ ] RN-050: Rebalance on Proportion Drift (Postponed)
+    - [x] Rebalance on Basket Change (RN-046/047)
+    - [x] RN-049: Rebalance stayed tickers to target proportions
+    - [ ] RN-050: Rebalance on Proportion Drift >5% (Postponed)
 - [x] **US05: B3 Data Integration**: Parse `COTAHIST` files to get closing prices.
 - [x] **US06: Tax Reporting (Kafka)**: Calculate IR Dedo-duro and Profit Tax and publish to Kafka.
 - [x] **US07: Client Dashboard**: View portfolio, average prices, and detailed profitability (P/L).
@@ -24,3 +25,8 @@
 - [x] Refactor: ExecutePurchaseMotorCommandHandler (Break down complex logic)
 - [x] Code Quality: Enforce linting and formatting
 - [x] API Development: US07 Endpoints
+- [x] Global Exception Middleware (structured error envelope)
+- [x] Enrich purchase motor response (ordensCompra, distribuicoes, residuosCustMaster, eventosIRPublicados)
+- [x] GET /api/admin/conta-master/custodia endpoint
+- [x] Unit tests — Application layer (32 tests, all green)
+- [ ] Integration tests

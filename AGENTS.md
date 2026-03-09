@@ -68,7 +68,8 @@ This document provides essential instructions for AI agents working on the Itau 
 │   │   │   ├── Commands/CreateBasket/          # CreateBasketCommand + Handler + Validator + Response
 │   │   │   └── Queries/
 │   │   │       ├── GetCurrentBasket/
-│   │   │       └── GetBasketHistory/
+│   │   │       ├── GetBasketHistory/
+│   │   │       └── GetMasterCustody/
 │   │   ├── Clients/
 │   │   │   ├── Commands/
 │   │   │   │   ├── CreateClient/               # CreateClientCommand + Handler + Validator
@@ -106,6 +107,8 @@ This document provides essential instructions for AI agents working on the Itau 
 │       │   ├── AdminController.cs
 │       │   ├── ClientsController.cs
 │       │   └── PurchasesController.cs
+│       ├── Middleware/
+│       │   └── GlobalExceptionMiddleware.cs    # Structured error envelope {erro, codigo}
 │       ├── Models/                             # Request/response models (JsonPropertyName in PT-BR)
 │       ├── Program.cs
 │       ├── appsettings.json
@@ -200,7 +203,7 @@ Kafka__BootstrapServers=...
 | US03 | Purchase motor endpoint (`POST /api/motor/executar-compra`) | Done |
 | US03 | Scheduled motor (days 5, 15, 25) via `PurchaseScheduler` | Done |
 | US04 | Rebalancing: sell tickers removed from basket (RN-046/047) | Done |
-| US04 | Rebalancing: stayed-ticker proportion drift RN-049 | **Pending** |
+| US04 | Rebalancing: stayed-ticker proportion drift RN-049 | Done |
 | US04 | Rebalancing: >5% drift trigger RN-050 | Postponed |
 | US05 | B3 COTAHIST file parser | Done |
 | US06 | IR dedo-duro Kafka events | Done |
@@ -219,16 +222,14 @@ Kafka__BootstrapServers=...
 | Kafka producer (`IKafkaProducer`) | Done |
 | Serilog JSON logging | Done |
 | Swagger / OpenAPI | Done |
-| Global exception middleware (error envelope) | **Pending** |
-| Unit tests — Application layer (26 tests, all green) | Done |
+| Global exception middleware (error envelope) | Done |
+| Unit tests — Application layer (32 tests, all green) | Done |
 | Integration tests | Not started |
 
 ### Known Gaps (next work items, in priority order)
 
-1. **RN-049** — Add `ProcessStayedTickerRebalancingAsync` to `ExecutePurchaseMotorCommandHandler` (compares current custody quantities against basket target %, sells excess / buys deficit). Include unit tests.
-2. **Global exception middleware** — `src/ItauCompraProgramada.Api/Middleware/GlobalExceptionMiddleware.cs`: map `ValidationException` → 400, `KeyNotFoundException` → 404, `InvalidOperationException` → 400/409/500 using the error-code table below. Register in `Program.cs`.
-3. **Enrich motor response** — `ExecutePurchaseMotorCommand` currently returns no data; the API contract expects `ordensCompra`, `distribuicoes`, `residuosCustMaster`, `eventosIRPublicados`.
-4. **`GET /api/admin/conta-master/custodia`** — endpoint defined in the API contract but not yet implemented.
+1. **Integration tests** — `tests/ItauCompraProgramada.IntegrationTests/` is a placeholder only. Real integration tests covering the full HTTP + DB + Kafka stack should be implemented using `WebApplicationFactory` with a test MySQL instance and a mock Kafka producer.
+2. **RN-050 — Proportion drift rebalancing (>5% trigger)** — Detect when a client's portfolio proportion for any basket ticker deviates more than 5% from the basket target and auto-trigger rebalancing. Currently classified as "Desejavel" (nice-to-have).
 
 ### Error envelope format & codes
 
